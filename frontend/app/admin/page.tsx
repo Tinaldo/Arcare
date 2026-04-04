@@ -292,17 +292,27 @@ export default function AdminPage() {
 
   if (!roles.isAdmin && !roles.isCreator) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <h1 className="mb-6 text-2xl font-extrabold text-slate-900">Admin Dashboard</h1>
+      <div className="mx-auto max-w-2xl space-y-5">
+        <h1 className="text-2xl font-extrabold text-slate-900">Admin Dashboard</h1>
         <div className="glass-card p-6 space-y-4">
-          <div className="flex items-center gap-2 text-slate-800 font-semibold">
-            <span className="material-symbols-outlined text-[20px] text-orange-500">warning</span>
-            Your wallet does not have a market creator role.
+          <div className="flex items-center gap-2 font-semibold text-slate-800">
+            <span className="material-symbols-outlined text-[20px] text-amber-500">lock</span>
+            Your wallet doesn&apos;t have creator access yet.
           </div>
           <p className="text-sm text-slate-500">
-            Wallet: <code className="font-mono text-[#745BFF] text-xs">{address}</code>
+            Share your wallet address with the project admin so they can grant you access.
           </p>
-          <pre className="overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs text-green-400 whitespace-pre-wrap break-all">
+
+          {/* Copyable address */}
+          <div className="rounded-xl bg-[rgba(116,91,255,0.05)] border border-[rgba(116,91,255,0.12)] p-4">
+            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">Your wallet address</p>
+            <code className="block break-all font-mono text-sm text-[#745BFF] select-all">{address}</code>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            Ask the admin to run this command with the deployer key:
+          </p>
+          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-4 text-xs text-green-400 select-all">
 {`cast send ${MARKET_FACTORY_ADDRESS} \\
   "grantMarketCreator(address)" ${address} \\
   --rpc-url https://rpc.testnet.arc.network \\
@@ -517,48 +527,81 @@ export default function AdminPage() {
         </div>
       )}
 
-      {roles.isAdmin && (
+      {/* Role Management — visible to any creator or admin */}
+      {(roles.isAdmin || roles.isCreator) && (
         <div className="glass-card p-6 space-y-5">
           <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <span className="material-symbols-outlined text-[20px] text-[#745BFF]">manage_accounts</span>
-            Role Management
+            Grant Creator Access
           </h2>
+
           <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Wallet Address</label>
-            <input className="arc-input" placeholder="0x…" value={roleTarget} onChange={(e) => setRoleTarget(e.target.value)} />
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
+              Friend&apos;s Wallet Address
+            </label>
+            <input
+              className="arc-input"
+              placeholder="0x…"
+              value={roleTarget}
+              onChange={(e) => setRoleTarget(e.target.value)}
+            />
           </div>
-          <div className="flex gap-3">
-            <button className="arc-btn-primary flex-1 py-2.5 text-sm" onClick={() => handleRole("grant")} disabled={!!roleStep}>
-              {roleStep ? <Spinner size={16} /> : "Grant Creator Role"}
-            </button>
-            <button
-              onClick={() => handleRole("revoke")}
-              disabled={!!roleStep}
-              className="flex-1 rounded-full border border-no-red py-2.5 text-sm font-bold text-no-red hover:bg-no-red/5 transition-colors disabled:opacity-50"
-            >
-              Revoke Creator Role
-            </button>
+
+          {/* On-chain buttons — only available if caller has DEFAULT_ADMIN_ROLE */}
+          {roles.isAdmin ? (
+            <>
+              <div className="flex gap-3">
+                <button
+                  className="arc-btn-primary flex-1 py-2.5 text-sm"
+                  onClick={() => handleRole("grant")}
+                  disabled={!!roleStep}
+                >
+                  {roleStep ? <Spinner size={16} /> : "Grant Creator Role"}
+                </button>
+                <button
+                  onClick={() => handleRole("revoke")}
+                  disabled={!!roleStep}
+                  className="flex-1 rounded-full border border-no-red py-2.5 text-sm font-bold text-no-red hover:bg-no-red/5 transition-colors disabled:opacity-50"
+                >
+                  Revoke Creator Role
+                </button>
+              </div>
+              {roleDone && (
+                <p className="flex items-center gap-1.5 text-sm font-semibold text-yes-green">
+                  <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                  {roleDone}
+                </p>
+              )}
+              {roleError && (
+                <p className="rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-sm text-red-500">
+                  {roleError}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="rounded-xl bg-amber-500/8 border border-amber-500/20 px-4 py-3 text-sm text-amber-700">
+              <span className="font-bold">Your wallet is a creator but not an admin.</span>{" "}
+              Run this command from your terminal using the deployer key to grant access:
+            </div>
+          )}
+
+          {/* Cast send command — always shown, dynamically fills in the address */}
+          <div>
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">
+              Terminal command (run with deployer key)
+            </p>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-4 text-xs text-green-400 select-all">
+{`cast send ${MARKET_FACTORY_ADDRESS} \\
+  "grantMarketCreator(address)" ${roleTarget || "<FRIEND_ADDRESS>"} \\
+  --rpc-url https://rpc.testnet.arc.network \\
+  --account deployer`}
+            </pre>
           </div>
-          {roleDone && (
-            <p className="flex items-center gap-1.5 text-sm font-semibold text-yes-green">
-              <span className="material-symbols-outlined text-[16px]">check_circle</span>
-              {roleDone}
-            </p>
-          )}
-          {roleError && (
-            <p className="rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-sm text-red-500">
-              {roleError}
-            </p>
-          )}
+
           <div className="rounded-xl bg-[rgba(116,91,255,0.05)] border border-[rgba(116,91,255,0.1)] p-4">
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Your wallet</p>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Your wallet address</p>
             <code className="text-xs text-[#745BFF] break-all font-mono">{address}</code>
           </div>
-          {adminRoleHash && creatorRoleHash && (
-            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-4 text-xs text-green-400">
-{`cast send ${MARKET_FACTORY_ADDRESS} "grantMarketCreator(address)" <ADDRESS> --rpc-url https://rpc.testnet.arc.network --account deployer`}
-            </pre>
-          )}
         </div>
       )}
     </div>
