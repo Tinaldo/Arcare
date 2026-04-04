@@ -162,6 +162,58 @@ export const MARKET_FACTORY_ABI = [
 ] as const;
 
 export const PREDICTION_MARKET_ABI = [
+  // ── Write functions ─────────────────────────────────────────────────────────
+  {
+    type: "function",
+    name: "buyOutcome",
+    inputs: [
+      { name: "isYes", type: "bool" },
+      { name: "usdcIn", type: "uint256" },
+      { name: "minTokensOut", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "sellOutcome",
+    inputs: [
+      { name: "isYes", type: "bool" },
+      { name: "tokensIn", type: "uint256" },
+      { name: "minUsdcOut", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "addLiquidity",
+    inputs: [{ name: "usdcIn", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "removeLiquidity",
+    inputs: [{ name: "shares", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "resolve",
+    inputs: [{ name: "_yesWins", type: "bool" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "redeem",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  // ── View functions ──────────────────────────────────────────────────────────
   {
     type: "function",
     name: "getMarketInfo",
@@ -233,6 +285,20 @@ export const PREDICTION_MARKET_ABI = [
     name: "owner",
     inputs: [],
     outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "resolved",
+    inputs: [],
+    outputs: [{ type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "totalCollateral",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
     stateMutability: "view",
   },
 ] as const;
