@@ -301,6 +301,13 @@ export const PREDICTION_MARKET_ABI = [
     outputs: [{ type: "uint256" }],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "totalLPShares",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 export const ERC20_ABI = [
