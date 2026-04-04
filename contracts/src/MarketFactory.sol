@@ -20,8 +20,6 @@ contract MarketFactory is AccessControl {
     // ─── State ────────────────────────────────────────────────────────────────
 
     IERC20 public immutable usdc;
-
-    /// @notice PriceRouter contract. Optional — if address(0), routing is skipped.
     PriceRouter public priceRouter;
 
     address[] public allMarkets;
@@ -57,6 +55,7 @@ contract MarketFactory is AccessControl {
     error ZeroLiquidity();
     error InvalidDeadline();
     error UnknownMarket();
+    error ERC20TransferFailed();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -103,7 +102,9 @@ contract MarketFactory is AccessControl {
         if (initialLiquidityUsdc == 0) revert ZeroLiquidity();
         if (resolutionDeadline <= block.timestamp) revert InvalidDeadline();
 
-        usdc.transferFrom(msg.sender, address(this), initialLiquidityUsdc);
+        if (!usdc.transferFrom(msg.sender, address(this), initialLiquidityUsdc)) {
+            revert ERC20TransferFailed();
+        }
 
         PredictionMarket pm = new PredictionMarket(
             msg.sender,
@@ -115,7 +116,9 @@ contract MarketFactory is AccessControl {
         );
         market = address(pm);
 
-        usdc.transfer(market, initialLiquidityUsdc);
+        if (!usdc.transfer(market, initialLiquidityUsdc)) {
+            revert ERC20TransferFailed();
+        }
 
         allMarkets.push(market);
         isMarket[market] = true;
@@ -136,8 +139,6 @@ contract MarketFactory is AccessControl {
         emit MarketCreated(market, question, category, resolutionDeadline, priceFeed, msg.sender);
     }
 
-    // ─── Admin ────────────────────────────────────────────────────────────────
-
     /// @notice Update the PriceRouter address. Use address(0) to disable routing.
     function setPriceRouter(address newRouter) external onlyRole(DEFAULT_ADMIN_ROLE) {
         emit RouterUpdated(address(priceRouter), newRouter);
@@ -150,6 +151,7 @@ contract MarketFactory is AccessControl {
     }
 
     function deleteMarket(address market) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (!isMarket[market]) revert UnknownMarket();
         uint256 usdcRefunded = PredictionMarket(payable(market)).deleteAndRefundOwner();
         _removeMarketFromRegistry(market);
         emit MarketDeleted(market, msg.sender, usdcRefunded);
@@ -158,6 +160,7 @@ contract MarketFactory is AccessControl {
     function _removeMarketFromRegistry(address market) internal {
         if (!isMarket[market]) revert UnknownMarket();
 
+        address priceFeed = marketInfo[market].priceFeed;
         uint256 index = marketIndex[market];
         uint256 lastIndex = allMarkets.length - 1;
 
@@ -171,6 +174,10 @@ contract MarketFactory is AccessControl {
         delete marketIndex[market];
         delete marketInfo[market];
         isMarket[market] = false;
+
+        if (priceFeed != address(0) && address(priceRouter) != address(0)) {
+            try priceRouter.unregisterMarket(market) {} catch {}
+        }
     }
 
     // ─── Registry views ───────────────────────────────────────────────────────

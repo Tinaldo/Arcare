@@ -1,0 +1,354 @@
+
+<?xml version="1.0" encoding="UTF-8"?>
+<prompt>
+  <meta>
+    <title>InsurArc Project And UI Requirements Prompt</title>
+    <project_name>InsurArc</project_name>
+    <generated_from_repo>/Users/bianconitino/Documents/ETHGlobal/InsurArc</generated_from_repo>
+    <purpose>
+      Use this prompt to brief a designer, frontend engineer, product agent, or implementation model on what the current InsurArc project does and what the UI must support.
+    </purpose>
+    <important_note>
+      This prompt is derived from the current repository state. It describes implemented behavior, near-term product intent, and UI requirements without exposing secret values from environment files.
+    </important_note>
+  </meta>
+
+  <role>
+    You are working on InsurArc, a crypto incident prediction market product built on Arc Testnet with Circle wallet infrastructure and Foundry smart contracts. Your job is to understand the project context first, then design, refine, or implement UI and product flows that remain consistent with the existing architecture.
+  </role>
+
+  <project_overview>
+    <summary>
+      InsurArc is a web application for creating and trading prediction markets around crypto incidents, primarily stablecoin depegs and protocol hacks. Users can sign in with Circle programmable wallets, browse active markets, inspect implied probabilities, buy or sell YES/NO exposure, add liquidity, redeem winnings after resolution, and create markets if they have the correct onchain role.
+    </summary>
+    <current_product_shape>
+      The frontend is a Next.js application. The core contracts are Solidity contracts deployed with Foundry. The trading system uses a fixed-product market maker model with USDC collateral on Arc Testnet. Wallet creation and transaction execution are handled through Circle's user-controlled wallet flows via Next.js API routes.
+    </current_product_shape>
+    <domain_focus>
+      The current product focuses on binary event markets for crypto risk events, specifically categories labeled DEPEG and HACK.
+    </domain_focus>
+  </project_overview>
+
+  <tech_stack>
+    <frontend>
+      <framework>Next.js App Router</framework>
+      <react_version>React 19</react_version>
+      <language>TypeScript</language>
+      <styling>Tailwind CSS v4 plus global utility classes</styling>
+      <blockchain_client>viem</blockchain_client>
+      <wallet_integration>Circle Programmable Wallet SDK</wallet_integration>
+    </frontend>
+    <contracts>
+      <tooling>Foundry</tooling>
+      <language>Solidity 0.8.x</language>
+      <core_contracts>
+        <contract>PredictionMarket</contract>
+        <contract>MarketFactory</contract>
+        <contract>PermissionedMarketFactory</contract>
+      </core_contracts>
+    </contracts>
+    <network>
+      <chain>Arc Testnet</chain>
+      <native_currency>USDC</native_currency>
+      <explorer>ArcScan</explorer>
+    </network>
+  </tech_stack>
+
+  <repository_map>
+    <area path="frontend">
+      Main web app. Contains App Router pages, market UI, wallet UI, Circle API routes, chain ABIs, address helpers, and shared client utilities.
+    </area>
+    <area path="contracts">
+      Main smart contract project. Includes market contracts, deployment scripts, tests, and Foundry configuration.
+    </area>
+    <area path="depeg-monitor">
+      Auxiliary monitoring and oracle-related work. Includes an InsurArc price feed contract for Chainlink CRE-style price reporting and future automated depeg resolution logic. This is not the primary UI surface today, but it is relevant future context.
+    </area>
+    <area path="design">
+      Local design artifacts and concept specs created during this session.
+    </area>
+  </repository_map>
+
+  <smart_contract_model>
+    <prediction_market>
+      <description>
+        The main market contract is a fixed-product market maker prediction market collateralized in USDC. It internally tracks YES and NO balances rather than minting separate ERC20 outcome tokens.
+      </description>
+      <features>
+        <feature>Bootstrap market with initial 50/50 liquidity</feature>
+        <feature>Add liquidity and remove liquidity via LP shares</feature>
+        <feature>Buy YES or NO using USDC</feature>
+        <feature>Sell YES or NO back into the market</feature>
+        <feature>Resolve the market to YES or NO</feature>
+        <feature>Redeem winning balances after resolution</feature>
+        <feature>Expose aggregated market info for the frontend in a single view call</feature>
+      </features>
+      <important_constraints>
+        <constraint>Collateral is USDC with 6 decimals</constraint>
+        <constraint>YES and NO prices are derived from reserves and returned as 1e18-scaled fixed-point values</constraint>
+        <constraint>Current resolution is owner-controlled</constraint>
+        <constraint>There are TODO notes indicating future Chainlink CRE-based resolution automation</constraint>
+      </important_constraints>
+    </prediction_market>
+    <factory_model>
+      <description>
+        Markets are deployed by a MarketFactory contract. The factory uses OpenZeppelin AccessControl. Admins can grant or revoke a MARKET_CREATOR_ROLE, and only accounts with that role can create new markets.
+      </description>
+      <features>
+        <feature>Deploy new PredictionMarket contracts</feature>
+        <feature>Transfer initial liquidity into the newly created market</feature>
+        <feature>Keep a registry of all created markets</feature>
+        <feature>Expose market count and paginated market addresses</feature>
+      </features>
+    </factory_model>
+    <future_monitoring_context>
+      <description>
+        The repository also contains an InsurArcPriceFeed contract in the depeg-monitor project. That contract is intended to receive external price reports and trigger depeg-related resolution logic. Treat this as future or parallel architecture, not the primary production UI flow implemented today.
+      </description>
+    </future_monitoring_context>
+  </smart_contract_model>
+
+  <frontend_behavior>
+    <global_layout>
+      <item>Sticky top navigation bar</item>
+      <item>Wallet status and entry points always available in the navbar</item>
+      <item>Main content constrained to a centered max-width container</item>
+      <item>Global light theme with white cards on a cool light-gray page background</item>
+    </global_layout>
+    <routes>
+      <route path="/">Home page showing hero, stats, and market grid</route>
+      <route path="/markets/[marketAddress]">Market detail page with pricing, position, trading, liquidity, and redemption</route>
+      <route path="/admin">Role-gated admin dashboard for market creation and creator role management</route>
+      <route path="/api/wallet">Server route that proxies Circle wallet operations</route>
+      <route path="/api/markets">Server route that creates Circle contract execution challenges</route>
+    </routes>
+    <wallet_flow>
+      <step>Users can sign up by choosing a user ID, retrieving a Circle user token, initializing a wallet, and completing PIN setup in the Circle modal flow</step>
+      <step>Users can sign in with an existing user ID and load an existing Arc Testnet wallet</step>
+      <step>Wallet session data is persisted locally in browser storage</step>
+      <step>Transaction approvals and executions happen through Circle challenge execution</step>
+      <step>The UI must clearly handle SDK initialization, sign-in errors, wallet absence, and per-transaction confirmation states</step>
+    </wallet_flow>
+  </frontend_behavior>
+
+  <current_design_system>
+    <theme>
+      <background>#F0F2F7</background>
+      <card>#FFFFFF</card>
+      <border>#DDE1EC</border>
+      <primary>#0057FF</primary>
+      <secondary>#6B4EFF</secondary>
+      <yes>#00A558</yes>
+      <no>#E8284A</no>
+      <text>#1A1D2E</text>
+    </theme>
+    <patterns>
+      <pattern>Rounded cards, usually 2xl corners</pattern>
+      <pattern>Subtle borders instead of heavy shadows</pattern>
+      <pattern>Gradient primary CTA buttons</pattern>
+      <pattern>Compact badges for category and status</pattern>
+      <pattern>Probability bars that visually separate YES and NO</pattern>
+      <pattern>Inline loading spinners for asynchronous actions</pattern>
+    </patterns>
+    <current_visual_issue>
+      Some components still contain text/background classes that look inherited from an older darker theme. Any redesign or polish pass should normalize those inconsistencies while preserving existing functionality.
+    </current_visual_issue>
+  </current_design_system>
+
+  <product_requirements>
+    <core_user_goals>
+      <goal>Discover active incident markets quickly</goal>
+      <goal>Understand the question, category, timing, liquidity, and implied probability without reading dense copy</goal>
+      <goal>Buy or sell YES or NO with clear preview and transaction states</goal>
+      <goal>Add liquidity with minimal friction</goal>
+      <goal>See owned positions and redeem when a market resolves</goal>
+      <goal>Create new markets when authorized</goal>
+      <goal>Manage creator permissions when admin privileges are available</goal>
+    </core_user_goals>
+    <user_types>
+      <user>Guest visitor browsing markets</user>
+      <user>Authenticated trader with Circle wallet</user>
+      <user>Liquidity provider</user>
+      <user>Market creator</user>
+      <user>Admin with role management privileges</user>
+    </user_types>
+  </product_requirements>
+
+  <screen_requirements>
+    <home_page>
+      <purpose>Landing and discovery surface for all markets</purpose>
+      <must_include>
+        <item>Hero section explaining the product in plain language</item>
+        <item>High-level stats such as total markets and active markets</item>
+        <item>Market category filtering for at least All, Depeg, and Hack</item>
+        <item>Card grid of markets with question, status, probabilities, volume or collateral, and time left</item>
+        <item>Loading, empty, and error states</item>
+      </must_include>
+      <ux_requirements>
+        <item>Users should be able to scan a market card in seconds</item>
+        <item>The category and active/resolved state should be visually obvious</item>
+        <item>The probability bar should be one of the dominant signals on each card</item>
+      </ux_requirements>
+    </home_page>
+
+    <market_detail_page>
+      <purpose>Execution surface for a single market</purpose>
+      <must_include>
+        <item>Question, category, active or resolved state, and back navigation</item>
+        <item>YES/NO probability visualization</item>
+        <item>Liquidity, deadline, and outcome summary stats</item>
+        <item>User position cards when the connected wallet holds exposure</item>
+        <item>Trade panel for buy and sell actions when unresolved</item>
+        <item>Liquidity panel when unresolved</item>
+        <item>Redeem panel when resolved</item>
+        <item>External contract/explorer link</item>
+      </must_include>
+      <ux_requirements>
+        <item>The market question should remain the primary focal point</item>
+        <item>The trade panel should be immediately usable without scrolling on desktop</item>
+        <item>Trade previews and transaction steps must be understandable by non-expert users</item>
+        <item>Resolved markets must clearly switch from trading to redemption behavior</item>
+      </ux_requirements>
+    </market_detail_page>
+
+    <trade_panel>
+      <must_include>
+        <item>BUY and SELL segmented control</item>
+        <item>YES and NO selection control</item>
+        <item>Amount input with correct unit label</item>
+        <item>Preview text for estimated output</item>
+        <item>Primary action button that reflects connected state and in-flight state</item>
+        <item>Visible slippage assumption</item>
+        <item>Error message rendering</item>
+      </must_include>
+      <interaction_requirements>
+        <item>If the user is not connected, the CTA should open wallet sign-in or sign-up flow</item>
+        <item>Approvals and final transactions should be represented as sequential steps</item>
+        <item>Preview values should update based on entered amount and selected side</item>
+      </interaction_requirements>
+    </trade_panel>
+
+    <liquidity_panel>
+      <must_include>
+        <item>Expandable or clearly separated liquidity area</item>
+        <item>Explanation that LPs provide USDC and earn fees</item>
+        <item>Input for liquidity amount</item>
+        <item>Two-step approval and execution messaging</item>
+      </must_include>
+    </liquidity_panel>
+
+    <wallet_modal>
+      <purpose>Primary authentication and onboarding flow</purpose>
+      <must_include>
+        <item>Separate sign-in and sign-up modes</item>
+        <item>User ID input and validation</item>
+        <item>Clear state transitions for token retrieval, wallet initialization, and PIN setup</item>
+        <item>Persistent feedback during challenge execution</item>
+        <item>Error messages that do not expose implementation details</item>
+      </must_include>
+      <ux_requirements>
+        <item>New users should understand that Circle handles the secure wallet layer</item>
+        <item>Returning users should be able to reconnect quickly</item>
+        <item>Transaction PIN usage should be explained in concise copy</item>
+      </ux_requirements>
+    </wallet_modal>
+
+    <admin_dashboard>
+      <purpose>Operational UI for market creators and admins</purpose>
+      <must_include>
+        <item>Unauthorized state for users without creator or admin roles</item>
+        <item>Create Market form with question, category, deadline, and initial liquidity</item>
+        <item>Role indicators showing whether the connected wallet is admin and/or market creator</item>
+        <item>Role management inputs and actions for admins</item>
+        <item>Clear success and error states for both market creation and role changes</item>
+      </must_include>
+      <ux_requirements>
+        <item>This screen can be more utilitarian than the trading screens, but it should still feel consistent with the product</item>
+        <item>Role boundaries must be explicit so users understand why actions are or are not available</item>
+      </ux_requirements>
+    </admin_dashboard>
+  </screen_requirements>
+
+  <ui_requirements>
+    <visual_principles>
+      <principle>Clarity over novelty for transaction-critical interactions</principle>
+      <principle>Probability, status, and liquidity should be more visually prominent than decorative copy</principle>
+      <principle>Use a modern financial-product aesthetic rather than a generic dashboard look</principle>
+      <principle>Preserve strong contrast between actionable controls and passive information</principle>
+      <principle>Keep the product visually credible for risk-related financial decisions</principle>
+    </visual_principles>
+    <interaction_states>
+      <state>Loading data</state>
+      <state>No markets deployed</state>
+      <state>Missing factory address or deployment configuration</state>
+      <state>Wallet disconnected</state>
+      <state>Circle SDK initializing</state>
+      <state>Approval step in progress</state>
+      <state>Contract execution in progress</state>
+      <state>Resolved market</state>
+      <state>User has winning position</state>
+      <state>User has no position</state>
+      <state>User lacks admin or creator role</state>
+    </interaction_states>
+    <responsiveness>
+      <requirement>The UI must work on both desktop and mobile</requirement>
+      <requirement>The market detail page should stack cleanly from two-column desktop layout to single-column mobile layout</requirement>
+      <requirement>Primary actions must remain easy to tap on touch devices</requirement>
+      <requirement>Long market questions must wrap gracefully without breaking card heights excessively</requirement>
+    </responsiveness>
+    <accessibility>
+      <requirement>Do not rely only on color to distinguish YES vs NO or Active vs Resolved</requirement>
+      <requirement>Inputs and buttons should have clear labels and focus states</requirement>
+      <requirement>Text contrast should remain sufficient on soft backgrounds and colored badges</requirement>
+      <requirement>Errors and success states should be readable and contextual</requirement>
+    </accessibility>
+  </ui_requirements>
+
+  <data_and_integration_requirements>
+    <frontend_data_sources>
+      <source>Read market registry and market info from MarketFactory and PredictionMarket contracts via viem</source>
+      <source>Use Circle wallet APIs through internal Next.js route handlers</source>
+      <source>Use Circle challenge execution for contract interactions such as approve, trade, liquidity, redeem, create market, and role management</source>
+    </frontend_data_sources>
+    <environment_assumptions>
+      <item>Frontend expects a public Circle app ID</item>
+      <item>Frontend expects a Circle API key on the server side</item>
+      <item>Frontend expects a market factory address</item>
+      <item>Frontend expects an Arc USDC address</item>
+      <item>Circle base URL is configurable and defaults to the Circle API host</item>
+    </environment_assumptions>
+    <safety_requirement>
+      Never hardcode or reveal secret environment variable values in generated output. You may reference required variable names and their purpose.
+    </safety_requirement>
+  </data_and_integration_requirements>
+
+  <known_constraints>
+    <constraint>The app currently targets Arc Testnet, not mainnet</constraint>
+    <constraint>The market resolution flow is still owner-driven in the current main contract</constraint>
+    <constraint>The price-monitoring or oracle subsystem is present in the repo but not integrated into the primary UI</constraint>
+    <constraint>Some visual classes show remnants of earlier styling choices and should be rationalized during UI polish</constraint>
+    <constraint>The project uses Circle wallet challenge flows, so UI interactions must allow for asynchronous external confirmation steps</constraint>
+  </known_constraints>
+
+  <non_goals>
+    <item>Do not describe this product as a general-purpose exchange or social platform</item>
+    <item>Do not assume support for arbitrary market categories beyond the currently implemented DEPEG and HACK categories unless explicitly expanding the product</item>
+    <item>Do not invent features such as charts, order books, comments, notifications, or portfolio analytics unless clearly labeled as proposed future work</item>
+    <item>Do not expose environment secrets, API keys, or private keys</item>
+  </non_goals>
+
+  <output_instructions>
+    <instruction>
+      When using this prompt, produce output that first summarizes the project in clear product language, then translates the product into concrete UI requirements, screen structure, interaction states, and implementation guidance.
+    </instruction>
+    <instruction>
+      If the task is design-oriented, preserve the current information architecture while improving visual polish, hierarchy, responsiveness, and transaction clarity.
+    </instruction>
+    <instruction>
+      If the task is implementation-oriented, keep compatibility with Next.js App Router, Tailwind, viem, Circle wallet flows, and the current Arc Testnet contract model.
+    </instruction>
+    <instruction>
+      Prefer grounded descriptions over generic crypto-app language. Use the actual terms used in this project: Arc Testnet, USDC, DEPEG, HACK, YES, NO, Market Creator, Admin, Liquidity, Resolution, Redeem.
+    </instruction>
+  </output_instructions>
+</prompt>

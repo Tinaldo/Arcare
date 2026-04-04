@@ -15,6 +15,7 @@ type ManagedMarket = {
   question: string;
   category: string;
   resolutionDeadline: bigint;
+  priceFeed: `0x${string}`;
 };
 
 function formatAdminDeadline(deadline: bigint) {
@@ -41,6 +42,7 @@ export default function AdminPage() {
   const [category, setCategory] = useState<"DEPEG" | "HACK">("DEPEG");
   const [deadline, setDeadline] = useState("");
   const [liquidity, setLiquidity] = useState("10");
+  const [priceFeed, setPriceFeed] = useState("");
   const [createStep, setCreateStep] = useState<string | null>(null);
   const [createError, setCreateError] = useState("");
   const [createDone, setCreateDone] = useState(false);
@@ -135,6 +137,7 @@ export default function AdminPage() {
             category: string;
             createdAt: bigint;
             resolutionDeadline: bigint;
+            priceFeed: `0x${string}`;
           };
 
           return {
@@ -142,6 +145,7 @@ export default function AdminPage() {
             question: info.question,
             category: info.category,
             resolutionDeadline: info.resolutionDeadline,
+            priceFeed: info.priceFeed,
           } satisfies ManagedMarket;
         })
       );
@@ -169,16 +173,22 @@ export default function AdminPage() {
     }
     const liqUsdc = parseUsdc(liquidity);
     if (liqUsdc === 0n) { setCreateError("Enter initial liquidity"); return; }
+    const normalizedPriceFeed = priceFeed.trim() === "" ? "0x0000000000000000000000000000000000000000" : priceFeed.trim();
+    if (!normalizedPriceFeed.startsWith("0x") || normalizedPriceFeed.length !== 42) {
+      setCreateError("Enter a valid price feed address or leave it empty");
+      return;
+    }
     try {
       setCreateStep("Step 1 of 2: Approve USDC…");
       await usdc.write("approve", [MARKET_FACTORY_ADDRESS, liqUsdc]);
       setCreateStep("Step 2 of 2: Creating market…");
-      await factory.write("createMarket", [question, category, BigInt(deadlineTs), liqUsdc]);
+      await factory.write("createMarket", [question, category, BigInt(deadlineTs), liqUsdc, normalizedPriceFeed]);
       setCreateDone(true);
       setCreateStep(null);
       setQuestion("");
       setDeadline("");
       setLiquidity("10");
+      setPriceFeed("");
       void loadManagedMarkets();
     } catch (e: unknown) {
       setCreateError((e as Error).message ?? "Failed to create market");
@@ -379,6 +389,15 @@ export default function AdminPage() {
                 <span className="text-sm font-semibold text-slate-400">USDC</span>
               </div>
             </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Price Feed Address (Optional)</label>
+              <input
+                className="arc-input"
+                placeholder="0x…"
+                value={priceFeed}
+                onChange={(e) => setPriceFeed(e.target.value)}
+              />
+            </div>
           </div>
 
           <button className="arc-btn-primary w-full py-3" onClick={handleCreateMarket} disabled={!!createStep}>
@@ -456,6 +475,9 @@ export default function AdminPage() {
                       <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                         <span>{market.category}</span>
                         <span>Deadline: {formatAdminDeadline(market.resolutionDeadline)}</span>
+                        {market.priceFeed !== "0x0000000000000000000000000000000000000000" && (
+                          <span>Feed: {market.priceFeed.slice(0, 8)}…{market.priceFeed.slice(-4)}</span>
+                        )}
                       </div>
                       <code className="block break-all text-xs text-[#745BFF]">{market.address}</code>
                     </div>

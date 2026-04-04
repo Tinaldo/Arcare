@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test, console2} from "forge-std/Test.sol";
 import {PredictionMarket} from "../src/PredictionMarket.sol";
 import {MarketFactory} from "../src/MarketFactory.sol";
+import {PriceRouter} from "../src/PriceRouter.sol";
 
 /// @dev Minimal ERC20 mock for USDC in tests
 contract MockUSDC {
@@ -42,6 +43,7 @@ contract PredictionMarketTest is Test {
     MockUSDC usdc;
     MarketFactory factory;
     PredictionMarket market;
+    PriceRouter router;
 
     address alice = address(0xA11CE);
     address bob   = address(0xB0B);
@@ -52,7 +54,9 @@ contract PredictionMarketTest is Test {
 
     function setUp() public {
         usdc = new MockUSDC();
-        factory = new MarketFactory(address(usdc));
+        router = new PriceRouter(owner);
+        factory = new MarketFactory(address(usdc), address(router));
+        router.grantMarketRegistrar(address(factory));
 
         // Fund owner and create market
         usdc.mint(owner, 10_000e6);
@@ -62,7 +66,8 @@ contract PredictionMarketTest is Test {
             "Will USDC depeg below $0.99 before end of 2025?",
             "DEPEG",
             DEADLINE,
-            INIT_LIQ
+            INIT_LIQ,
+            address(0)
         );
         market = PredictionMarket(mAddr);
 
@@ -328,6 +333,38 @@ contract PredictionMarketTest is Test {
     function test_Factory_MarketInfo() public view {
         MarketFactory.MarketInfo memory info = factory.getMarketInfo(address(market));
         assertEq(info.category, "DEPEG");
+        assertEq(info.priceFeed, address(0));
+    }
+
+    function test_Factory_RegistersPriceFeedRoute() public {
+        address priceFeed = address(0xfeed);
+
+        address routedMarket = factory.createMarket(
+            "Will ETH break $10k?",
+            "HACK",
+            DEADLINE + 1,
+            100e6,
+            priceFeed
+        );
+
+        assertEq(router.feedByMarket(routedMarket), priceFeed);
+        assertEq(router.getMarketCountForFeed(priceFeed), 1);
+    }
+
+    function test_Factory_RemoveMarket_UnregistersPriceFeedRoute() public {
+        address priceFeed = address(0xfeed);
+        address routedMarket = factory.createMarket(
+            "Will BTC break $200k?",
+            "HACK",
+            DEADLINE + 2,
+            100e6,
+            priceFeed
+        );
+
+        factory.removeMarket(routedMarket);
+
+        assertEq(router.feedByMarket(routedMarket), address(0));
+        assertEq(router.getMarketCountForFeed(priceFeed), 0);
     }
 
     function test_Factory_RemoveMarket() public {
@@ -360,6 +397,23 @@ contract PredictionMarketTest is Test {
         assertEq(market.totalCollateral(), 0);
         assertEq(market.totalLPShares(), 0);
         assertTrue(market.resolved());
+        assertEq(router.feedByMarket(address(market)), address(0));
+    }
+
+    function test_Factory_DeleteMarket_UnregistersPriceFeedRoute() public {
+        address priceFeed = address(0xfeed);
+        address routedMarket = factory.createMarket(
+            "Will SOL break $1,000?",
+            "HACK",
+            DEADLINE + 3,
+            100e6,
+            priceFeed
+        );
+
+        factory.deleteMarket(routedMarket);
+
+        assertEq(router.feedByMarket(routedMarket), address(0));
+        assertEq(router.getMarketCountForFeed(priceFeed), 0);
     }
 
     function test_Factory_DeleteMarket_RevertsWithOpenInterest() public {
@@ -382,14 +436,19 @@ contract PredictionMarketTest is Test {
         factory.deleteMarket(address(market));
     }
 
+    function test_Factory_DeleteMarket_UnknownMarket() public {
+        vm.expectRevert(MarketFactory.UnknownMarket.selector);
+        factory.deleteMarket(address(0xdead));
+    }
+
     function test_Factory_InvalidDeadline() public {
         vm.expectRevert(MarketFactory.InvalidDeadline.selector);
-        factory.createMarket("Q?", "HACK", block.timestamp, 100e6);
+        factory.createMarket("Q?", "HACK", block.timestamp, 100e6, address(0));
     }
 
     function test_Factory_ZeroLiquidity() public {
         vm.expectRevert(MarketFactory.ZeroLiquidity.selector);
-        factory.createMarket("Q?", "HACK", DEADLINE, 0);
+        factory.createMarket("Q?", "HACK", DEADLINE, 0, address(0));
     }
 
     // ─── Fuzz ─────────────────────────────────────────────────────────────────

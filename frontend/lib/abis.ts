@@ -1,7 +1,10 @@
 export const MARKET_FACTORY_ABI = [
   {
     type: "constructor",
-    inputs: [{ name: "_usdc", type: "address" }],
+    inputs: [
+      { name: "_usdc", type: "address" },
+      { name: "_priceRouter", type: "address" },
+    ],
     stateMutability: "nonpayable",
   },
   {
@@ -50,8 +53,23 @@ export const MARKET_FACTORY_ABI = [
       { name: "category", type: "string" },
       { name: "resolutionDeadline", type: "uint256" },
       { name: "initialLiquidityUsdc", type: "uint256" },
+      { name: "priceFeed", type: "address" },
     ],
     outputs: [{ name: "market", type: "address" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "priceRouter",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setPriceRouter",
+    inputs: [{ name: "newRouter", type: "address" }],
+    outputs: [],
     stateMutability: "nonpayable",
   },
   {
@@ -98,6 +116,7 @@ export const MARKET_FACTORY_ABI = [
           { name: "category", type: "string" },
           { name: "createdAt", type: "uint256" },
           { name: "resolutionDeadline", type: "uint256" },
+          { name: "priceFeed", type: "address" },
         ],
       },
     ],
@@ -111,6 +130,7 @@ export const MARKET_FACTORY_ABI = [
       { name: "question", type: "string", indexed: false },
       { name: "category", type: "string", indexed: false },
       { name: "resolutionDeadline", type: "uint256", indexed: false },
+      { name: "priceFeed", type: "address", indexed: true },
       { name: "creator", type: "address", indexed: true },
     ],
   },
@@ -129,6 +149,14 @@ export const MARKET_FACTORY_ABI = [
     inputs: [
       { name: "market", type: "address", indexed: true },
       { name: "removedBy", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "RouterUpdated",
+    inputs: [
+      { name: "oldRouter", type: "address", indexed: true },
+      { name: "newRouter", type: "address", indexed: true },
     ],
   },
 ] as const;

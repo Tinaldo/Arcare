@@ -132,14 +132,21 @@ export async function POST(request: Request) {
 
       // ── Create market (factory call) ───────────────────────────────────────
       case "createMarket": {
-        const { factoryAddress, question, category, resolutionDeadline, initialLiquidityUsdc } =
+        const {
+          factoryAddress,
+          question,
+          category,
+          resolutionDeadline,
+          initialLiquidityUsdc,
+          priceFeed = "0x0000000000000000000000000000000000000000",
+        } =
           params;
         const result = await contractExecution(
           userToken,
           walletId,
           factoryAddress,
-          "createMarket(string,string,uint256,uint256)",
-          [question, category, resolutionDeadline, initialLiquidityUsdc]
+          "createMarket(string,string,uint256,uint256,address)",
+          [question, category, resolutionDeadline, initialLiquidityUsdc, priceFeed]
         );
         return NextResponse.json(result);
       }
