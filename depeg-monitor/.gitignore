@@ -1,0 +1,7 @@
+node_modules/
+contracts/node_modules/
+my-workflow/node_modules/
+contracts/.env
+contracts/out/
+contracts/cache/
+contracts/broadcast/
