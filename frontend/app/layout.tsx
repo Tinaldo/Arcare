@@ -1,14 +1,8 @@
-"use client";
-
 import "./globals.css";
-import { useCircleWallet } from "@/components/wallet/useCircleWallet";
-import { WalletProvider } from "@/components/wallet/WalletContext";
-import { WalletModal } from "@/components/wallet/WalletModal";
+import { Providers } from "./providers";
 import { Navbar } from "@/components/layout/Navbar";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const walletState = useCircleWallet();
-
   return (
     <html lang="en">
       <head>
@@ -19,11 +13,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body suppressHydrationWarning>
-        <WalletProvider value={walletState}>
-          <Navbar walletState={walletState} />
+        <Providers>
+          <Navbar />
           <main className="mx-auto max-w-7xl px-6 py-10">{children}</main>
-          <WalletModal walletState={walletState} />
-        </WalletProvider>
+        </Providers>
       </body>
     </html>
   );

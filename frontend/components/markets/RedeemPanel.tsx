@@ -2,20 +2,23 @@
 
 import { useState } from "react";
 import { Spinner } from "@/components/ui/Spinner";
-import { redeemChallenge } from "@/lib/circle-api";
-import type { CircleWalletState } from "@/components/wallet/useCircleWallet";
+import { PREDICTION_MARKET_ABI } from "@/lib/abis";
+import { useContract } from "@/lib/use-contract";
+import type { WalletState } from "@/components/wallet/useWallet";
 import type { MarketOnChain } from "@/lib/types";
 
 interface Props {
   market: MarketOnChain;
-  walletState: CircleWalletState;
+  walletState: WalletState;
   userYesBalance: bigint;
   userNoBalance: bigint;
   onComplete?: () => void;
 }
 
 export function RedeemPanel({ market, walletState, userYesBalance, userNoBalance, onComplete }: Props) {
-  const { isConnected, wallet, userToken, executeChallenge, refreshBalance } = walletState;
+  const { isConnected } = walletState;
+  const contract = useContract(market.address as `0x${string}`, PREDICTION_MARKET_ABI)
+
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,13 +29,11 @@ export function RedeemPanel({ market, walletState, userYesBalance, userNoBalance
   if (winningBalance === 0n) return null;
 
   const handleRedeem = async () => {
-    if (!isConnected || !wallet || !userToken) return;
+    if (!isConnected) return;
     setLoading(true);
     setError(null);
     try {
-      const ch = await redeemChallenge(userToken, wallet.id, market.address);
-      await executeChallenge(ch.challengeId);
-      await refreshBalance();
+      await contract.write("redeem", []);
       setDone(true);
       onComplete?.();
     } catch (e: unknown) {

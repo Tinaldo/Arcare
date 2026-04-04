@@ -2,37 +2,40 @@
 
 import { useState } from "react";
 import { Spinner } from "@/components/ui/Spinner";
-import { approveUsdcChallenge, addLiquidityChallenge } from "@/lib/circle-api";
 import { parseUsdc } from "@/lib/arc-client";
-import type { CircleWalletState } from "@/components/wallet/useCircleWallet";
+import { PREDICTION_MARKET_ABI } from "@/lib/abis";
+import { ARC_USDC_ADDRESS } from "@/lib/addresses";
+import { useContract, ERC20_ABI } from "@/lib/use-contract";
+import type { WalletState } from "@/components/wallet/useWallet";
 
 interface Props {
   marketAddress: string;
-  walletState: CircleWalletState;
+  walletState: WalletState;
   onComplete?: () => void;
 }
 
 export function LiquidityPanel({ marketAddress, walletState, onComplete }: Props) {
-  const { isConnected, wallet, userToken, openModal, executeChallenge } = walletState;
+  const { isConnected, connect } = walletState;
+  const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI)
+  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI)
+
   const [amount, setAmount] = useState("");
   const [txStep, setTxStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   const handleAdd = async () => {
-    if (!isConnected || !wallet || !userToken) { openModal(); return; }
+    if (!isConnected) { connect(); return; }
     const amtBig = parseUsdc(amount);
     if (amtBig === 0n) { setError("Enter an amount"); return; }
     setError(null);
 
     try {
       setTxStep("Step 1 of 2: Approve USDC…");
-      const appCh = await approveUsdcChallenge(userToken, wallet.id, marketAddress, amtBig.toString());
-      await executeChallenge(appCh.challengeId);
+      await usdc.write("approve", [marketAddress, amtBig]);
 
       setTxStep("Step 2 of 2: Add liquidity…");
-      const liqCh = await addLiquidityChallenge(userToken, wallet.id, marketAddress, amtBig.toString());
-      await executeChallenge(liqCh.challengeId);
+      await market.write("addLiquidity", [amtBig]);
 
       setAmount("");
       setTxStep(null);

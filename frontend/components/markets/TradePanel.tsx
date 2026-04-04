@@ -4,13 +4,13 @@ import { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui/Spinner";
 import { arcClient, parseUsdc, formatUsdc } from "@/lib/arc-client";
 import { PREDICTION_MARKET_ABI } from "@/lib/abis";
-import { approveUsdcChallenge, buyOutcomeChallenge, sellOutcomeChallenge } from "@/lib/circle-api";
 import { ARC_USDC_ADDRESS } from "@/lib/addresses";
-import type { CircleWalletState } from "@/components/wallet/useCircleWallet";
+import { useContract, ERC20_ABI } from "@/lib/use-contract";
+import type { WalletState } from "@/components/wallet/useWallet";
 
 interface Props {
   marketAddress: string;
-  walletState: CircleWalletState;
+  walletState: WalletState;
   onTxComplete?: () => void;
 }
 
@@ -20,8 +20,9 @@ type Outcome = "YES" | "NO";
 const SLIPPAGE = 0.005; // 0.5%
 
 export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) {
-  const { isConnected, wallet, userToken, openModal, executeChallenge, refreshBalance } =
-    walletState;
+  const { isConnected, connect } = walletState;
+  const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI)
+  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI)
 
   const [action, setAction] = useState<Action>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("YES");
@@ -48,12 +49,11 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
           });
           setPreview(`≈ ${formatUsdc(out as bigint)} ${outcome} tokens`);
         } else {
-          const tokensBig = parseUsdc(amount); // amount in tokens for sell
           const out = await arcClient.readContract({
             address: addr,
             abi: PREDICTION_MARKET_ABI,
             functionName: "calcSell",
-            args: [isYes, tokensBig],
+            args: [isYes, parseUsdc(amount)],
           });
           setPreview(`≈ ${formatUsdc(out as bigint)} USDC`);
         }
@@ -65,7 +65,7 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
   }, [amount, action, outcome, marketAddress]);
 
   const handleTrade = async () => {
-    if (!isConnected || !wallet || !userToken) { openModal(); return; }
+    if (!isConnected) { connect(); return; }
     setError(null);
     const amtBig = parseUsdc(amount);
     if (amtBig === 0n) { setError("Enter an amount"); return; }
@@ -73,46 +73,20 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
 
     try {
       if (action === "BUY") {
-        // Step 1: approve USDC
         setTxStep("Step 1 of 2: Approve USDC spend…");
-        const approveCh = await approveUsdcChallenge(
-          userToken,
-          wallet.id,
-          marketAddress,
-          amtBig.toString()
-        );
-        await executeChallenge(approveCh.challengeId);
+        await usdc.write("approve", [marketAddress, amtBig]);
 
-        // Step 2: buy
         setTxStep("Step 2 of 2: Confirm trade…");
         const minOut = BigInt(Math.floor(Number(amtBig) * (1 - SLIPPAGE)));
-        const buyCh = await buyOutcomeChallenge(
-          userToken,
-          wallet.id,
-          marketAddress,
-          isYes,
-          amtBig.toString(),
-          minOut.toString()
-        );
-        await executeChallenge(buyCh.challengeId);
+        await market.write("buyOutcome", [isYes, amtBig, minOut]);
       } else {
-        // Sell
         setTxStep("Confirm sell…");
         const minOut = BigInt(Math.floor(Number(amtBig) * (1 - SLIPPAGE)));
-        const sellCh = await sellOutcomeChallenge(
-          userToken,
-          wallet.id,
-          marketAddress,
-          isYes,
-          amtBig.toString(),
-          minOut.toString()
-        );
-        await executeChallenge(sellCh.challengeId);
+        await market.write("sellOutcome", [isYes, amtBig, minOut]);
       }
 
       setAmount("");
       setTxStep(null);
-      await refreshBalance();
       onTxComplete?.();
     } catch (e: unknown) {
       setError((e as Error).message ?? "Transaction failed");
@@ -174,22 +148,17 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
         </div>
       </div>
 
-      {/* Preview */}
       {preview && (
         <p className="mb-3 text-center text-sm text-slate-500">{preview}</p>
       )}
 
-      {/* CTA */}
       <button
         onClick={handleTrade}
         disabled={!!txStep}
         className="arc-btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-60"
       >
         {txStep ? (
-          <>
-            <Spinner size={16} />
-            {txStep}
-          </>
+          <><Spinner size={16} />{txStep}</>
         ) : isConnected ? (
           `${action} ${outcome}`
         ) : (
@@ -198,7 +167,6 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
       </button>
 
       {error && <p className="mt-3 text-center text-sm text-red-400">{error}</p>}
-
       <p className="mt-3 text-center text-xs text-slate-400">0.5% slippage tolerance</p>
     </div>
   );

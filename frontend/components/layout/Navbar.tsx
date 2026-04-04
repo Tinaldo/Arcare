@@ -2,13 +2,11 @@
 
 import Link from "next/link";
 import { WalletButton } from "@/components/wallet/WalletButton";
-import type { CircleWalletState } from "@/components/wallet/useCircleWallet";
+import { useWallet } from "@/components/wallet/WalletContext";
 
-interface Props {
-  walletState: CircleWalletState;
-}
+export function Navbar() {
+  const { isConnected } = useWallet();
 
-export function Navbar({ walletState }: Props) {
   return (
     <nav className="sticky top-0 z-40 border-b border-arc-border bg-white/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
@@ -28,7 +26,7 @@ export function Navbar({ walletState }: Props) {
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
             Markets
           </Link>
-          {walletState.isConnected && (
+          {isConnected && (
             <Link href="/admin" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
               Admin
             </Link>
@@ -36,7 +34,7 @@ export function Navbar({ walletState }: Props) {
         </div>
 
         {/* Wallet */}
-        <WalletButton walletState={walletState} />
+        <WalletButton />
       </div>
     </nav>
   );

@@ -6,30 +6,21 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useWallet } from "@/components/wallet/WalletContext";
 import { arcClient, parseUsdc } from "@/lib/arc-client";
 import { MARKET_FACTORY_ABI } from "@/lib/abis";
-import { MARKET_FACTORY_ADDRESS } from "@/lib/addresses";
-import {
-  approveUsdcChallenge,
-  createMarketChallenge,
-  grantMarketCreatorChallenge,
-  revokeMarketCreatorChallenge,
-} from "@/lib/circle-api";
-
-// keccak256("MARKET_CREATOR_ROLE") — matches the contract constant
-const MARKET_CREATOR_ROLE =
-  "0x4a4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e" as `0x${string}`;
+import { MARKET_FACTORY_ADDRESS, ARC_USDC_ADDRESS } from "@/lib/addresses";
+import { useContract, ERC20_ABI } from "@/lib/use-contract";
 
 type Roles = { isAdmin: boolean; isCreator: boolean };
 
 export default function AdminPage() {
-  const walletState = useWallet();
-  const { isConnected, wallet, userToken, openModal, executeChallenge, refreshBalance } =
-    walletState;
+  const { isConnected, address, connect } = useWallet();
   const router = useRouter();
 
-  const { sdkReady } = walletState;
+  const factory = useContract(MARKET_FACTORY_ADDRESS, MARKET_FACTORY_ABI)
+  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI)
+
   const [roles, setRoles] = useState<Roles | null>(null);
-  const [creatorRoleHash, setCreatorRoleHash] = useState<`0x${string}` | null>(null);
   const [adminRoleHash, setAdminRoleHash] = useState<`0x${string}` | null>(null);
+  const [creatorRoleHash, setCreatorRoleHash] = useState<`0x${string}` | null>(null);
   const [loadingRoles, setLoadingRoles] = useState(false);
 
   // Create market form
@@ -48,7 +39,7 @@ export default function AdminPage() {
   const [roleDone, setRoleDone] = useState("");
 
   const loadRoles = useCallback(async () => {
-    if (!wallet || MARKET_FACTORY_ADDRESS === "0x0") return;
+    if (!address || MARKET_FACTORY_ADDRESS === "0x0") return;
     setLoadingRoles(true);
     try {
       const [creatorRole, adminRole] = await Promise.all([
@@ -71,13 +62,13 @@ export default function AdminPage() {
           address: MARKET_FACTORY_ADDRESS,
           abi: MARKET_FACTORY_ABI,
           functionName: "hasRole",
-          args: [creatorRole, wallet.address as `0x${string}`],
+          args: [creatorRole, address],
         }) as Promise<boolean>,
         arcClient.readContract({
           address: MARKET_FACTORY_ADDRESS,
           abi: MARKET_FACTORY_ABI,
           functionName: "hasRole",
-          args: [adminRole, wallet.address as `0x${string}`],
+          args: [adminRole, address],
         }) as Promise<boolean>,
       ]);
       setRoles({ isAdmin, isCreator });
@@ -86,7 +77,7 @@ export default function AdminPage() {
     } finally {
       setLoadingRoles(false);
     }
-  }, [wallet]);
+  }, [address]);
 
   useEffect(() => {
     if (isConnected) void loadRoles();
@@ -95,7 +86,7 @@ export default function AdminPage() {
   // ── Create Market ─────────────────────────────────────────────────────────
 
   const handleCreateMarket = async () => {
-    if (!wallet || !userToken) { openModal(); return; }
+    if (!isConnected) { connect(); return; }
     setCreateError("");
     setCreateDone(false);
 
@@ -113,36 +104,11 @@ export default function AdminPage() {
 
     try {
       setCreateStep("Step 1 of 2: Approve USDC...");
-      const approveCh = await approveUsdcChallenge(
-        userToken, wallet.id, MARKET_FACTORY_ADDRESS, liqUsdc.toString()
-      );
-      if (!approveCh.challengeId) {
-        const msg = (approveCh as unknown as { message?: string; error?: string }).message
-          ?? (approveCh as unknown as { message?: string; error?: string }).error
-          ?? "Approval failed — check your USDC balance";
-        throw new Error(msg);
-      }
-      await executeChallenge(approveCh.challengeId);
+      await usdc.write("approve", [MARKET_FACTORY_ADDRESS, liqUsdc]);
 
       setCreateStep("Step 2 of 2: Creating market...");
-      const createCh = await createMarketChallenge(
-        userToken,
-        wallet.id,
-        MARKET_FACTORY_ADDRESS,
-        question,
-        category,
-        deadlineTs.toString(),
-        liqUsdc.toString()
-      );
-      if (!createCh.challengeId) {
-        const msg = (createCh as unknown as { message?: string; error?: string }).message
-          ?? (createCh as unknown as { message?: string; error?: string }).error
-          ?? "Create market failed";
-        throw new Error(msg);
-      }
-      await executeChallenge(createCh.challengeId);
+      await factory.write("createMarket", [question, category, BigInt(deadlineTs), liqUsdc]);
 
-      await refreshBalance();
       setCreateDone(true);
       setCreateStep(null);
       setQuestion("");
@@ -157,7 +123,7 @@ export default function AdminPage() {
   // ── Grant / Revoke Role ───────────────────────────────────────────────────
 
   const handleRole = async (action: "grant" | "revoke") => {
-    if (!wallet || !userToken) { openModal(); return; }
+    if (!isConnected) { connect(); return; }
     if (!roleTarget.startsWith("0x") || roleTarget.length !== 42) {
       setRoleError("Enter a valid 0x address");
       return;
@@ -167,10 +133,8 @@ export default function AdminPage() {
     setRoleStep(`${action === "grant" ? "Granting" : "Revoking"} role...`);
 
     try {
-      const ch = action === "grant"
-        ? await grantMarketCreatorChallenge(userToken, wallet.id, MARKET_FACTORY_ADDRESS, roleTarget)
-        : await revokeMarketCreatorChallenge(userToken, wallet.id, MARKET_FACTORY_ADDRESS, roleTarget);
-      await executeChallenge(ch.challengeId);
+      const fn = action === "grant" ? "grantMarketCreator" : "revokeMarketCreator";
+      await factory.write(fn, [roleTarget]);
       setRoleDone(`Role ${action === "grant" ? "granted to" : "revoked from"} ${roleTarget.slice(0, 10)}...`);
       setRoleTarget("");
     } catch (e: unknown) {
@@ -186,8 +150,8 @@ export default function AdminPage() {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
         <p className="text-slate-500">Connect your wallet to access the admin dashboard.</p>
-        <button onClick={() => openModal("signin")} className="arc-btn-primary px-6 py-2.5">
-          Sign In
+        <button onClick={connect} className="arc-btn-primary px-6 py-2.5">
+          Connect Wallet
         </button>
       </div>
     );
@@ -212,14 +176,11 @@ export default function AdminPage() {
         <div className="rounded-2xl border border-arc-border bg-white p-6 space-y-4">
           <p className="font-semibold text-slate-800">Your wallet does not have a market creator role.</p>
           <p className="text-sm text-slate-500">
-            Your Circle wallet address: <code className="text-arc-blue">{wallet?.address}</code>
-          </p>
-          <p className="text-sm text-slate-500">
-            Ask the factory admin to grant you the role, or run this command with the deployer key:
+            Your wallet address: <code className="text-arc-blue">{address}</code>
           </p>
           <pre className="overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs text-green-400">
 {`cast send ${MARKET_FACTORY_ADDRESS} \\
-  "grantMarketCreator(address)" ${wallet?.address} \\
+  "grantMarketCreator(address)" ${address} \\
   --rpc-url https://rpc.testnet.arc.network \\
   --account deployer`}
           </pre>
@@ -254,9 +215,7 @@ export default function AdminPage() {
           {createDone && (
             <div className="rounded-xl border border-yes-green/30 bg-yes-green/10 p-4 text-yes-green font-medium">
               Market created successfully!{" "}
-              <button onClick={() => router.push("/")} className="underline">
-                View markets
-              </button>
+              <button onClick={() => router.push("/")} className="underline">View markets</button>
             </div>
           )}
 
@@ -270,15 +229,10 @@ export default function AdminPage() {
                 onChange={(e) => setQuestion(e.target.value)}
               />
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-700">Category</label>
-                <select
-                  className="arc-input"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as "DEPEG" | "HACK")}
-                >
+                <select className="arc-input" value={category} onChange={(e) => setCategory(e.target.value as "DEPEG" | "HACK")}>
                   <option value="DEPEG">DEPEG</option>
                   <option value="HACK">HACK</option>
                 </select>
@@ -294,11 +248,8 @@ export default function AdminPage() {
                 />
               </div>
             </div>
-
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                Initial Liquidity (USDC)
-              </label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Initial Liquidity (USDC)</label>
               <div className="flex items-center gap-2 rounded-xl border border-arc-border bg-slate-50 px-4 py-3">
                 <input
                   type="number"
@@ -309,26 +260,14 @@ export default function AdminPage() {
                 />
                 <span className="text-sm text-slate-400">USDC</span>
               </div>
-              <p className="mt-1 text-xs text-slate-400">
-                Seeds the AMM pool. Split 50/50 between YES and NO reserves.
-              </p>
             </div>
           </div>
 
-          <button
-            className="arc-btn-primary w-full py-3 gap-2"
-            onClick={handleCreateMarket}
-            disabled={!!createStep || !sdkReady}
-          >
+          <button className="arc-btn-primary w-full py-3 gap-2" onClick={handleCreateMarket} disabled={!!createStep}>
             {createStep ? (
-              <span className="flex items-center justify-center gap-2">
-                <Spinner size={16} />
-                {createStep}
-              </span>
+              <span className="flex items-center justify-center gap-2"><Spinner size={16} />{createStep}</span>
             ) : "Create Market"}
           </button>
-
-          {!sdkReady && <p className="text-xs text-slate-400">Initializing Circle SDK...</p>}
           {createError && <p className="text-sm text-red-500">{createError}</p>}
         </div>
       )}
@@ -337,26 +276,12 @@ export default function AdminPage() {
       {roles.isAdmin && (
         <div className="rounded-2xl border border-arc-border bg-white p-6 space-y-5">
           <h2 className="text-lg font-semibold text-slate-900">Role Management</h2>
-          <p className="text-sm text-slate-500">
-            Grant or revoke <span className="font-semibold text-slate-700">MARKET_CREATOR_ROLE</span> for any address.
-          </p>
-
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Wallet Address</label>
-            <input
-              className="arc-input"
-              placeholder="0x..."
-              value={roleTarget}
-              onChange={(e) => setRoleTarget(e.target.value)}
-            />
+            <input className="arc-input" placeholder="0x..." value={roleTarget} onChange={(e) => setRoleTarget(e.target.value)} />
           </div>
-
           <div className="flex gap-3">
-            <button
-              className="arc-btn-primary flex-1 py-2.5 text-sm"
-              onClick={() => handleRole("grant")}
-              disabled={!!roleStep}
-            >
+            <button className="arc-btn-primary flex-1 py-2.5 text-sm" onClick={() => handleRole("grant")} disabled={!!roleStep}>
               {roleStep ? <Spinner size={16} /> : "Grant Creator Role"}
             </button>
             <button
@@ -367,22 +292,16 @@ export default function AdminPage() {
               Revoke Creator Role
             </button>
           </div>
-
           {roleDone && <p className="text-sm text-yes-green font-medium">{roleDone}</p>}
           {roleError && <p className="text-sm text-red-500">{roleError}</p>}
-
           <div className="rounded-xl border border-arc-border bg-slate-50 p-4">
-            <p className="text-xs text-slate-500 font-medium mb-1">Your wallet address (share this to receive roles):</p>
-            <code className="text-xs text-arc-blue break-all">{wallet?.address}</code>
+            <p className="text-xs text-slate-500 font-medium mb-1">Your wallet address:</p>
+            <code className="text-xs text-arc-blue break-all">{address}</code>
           </div>
-
           {adminRoleHash && creatorRoleHash && (
-            <div className="rounded-xl border border-arc-border bg-slate-50 p-4 space-y-2">
-              <p className="text-xs font-medium text-slate-500 mb-2">Or use cast to manage roles directly:</p>
-              <pre className="text-xs text-slate-700 overflow-x-auto whitespace-pre-wrap break-all">
+            <pre className="text-xs text-slate-700 overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-arc-border bg-slate-50 p-4">
 {`cast send ${MARKET_FACTORY_ADDRESS} "grantMarketCreator(address)" <ADDRESS> --rpc-url https://rpc.testnet.arc.network --account deployer`}
-              </pre>
-            </div>
+            </pre>
           )}
         </div>
       )}

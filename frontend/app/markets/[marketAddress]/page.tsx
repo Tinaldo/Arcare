@@ -25,7 +25,7 @@ function formatDeadline(deadline: bigint): string {
 export default function MarketPage() {
   const { marketAddress } = useParams<{ marketAddress: string }>();
   const walletState = useWallet();
-  const { wallet } = walletState;
+  const { address, isConnected } = walletState;
 
   const [market, setMarket] = useState<MarketOnChain | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,15 +45,15 @@ export default function MarketPage() {
   }, [marketAddress]);
 
   const loadUserBalances = useCallback(async () => {
-    if (!wallet) return;
+    if (!address) return;
     const addr = marketAddress as `0x${string}`;
     const [yes, no] = await Promise.all([
-      arcClient.readContract({ address: addr, abi: PREDICTION_MARKET_ABI, functionName: "yesBalances", args: [wallet.address as `0x${string}`] }),
-      arcClient.readContract({ address: addr, abi: PREDICTION_MARKET_ABI, functionName: "noBalances", args: [wallet.address as `0x${string}`] }),
+      arcClient.readContract({ address: addr, abi: PREDICTION_MARKET_ABI, functionName: "yesBalances", args: [address] }),
+      arcClient.readContract({ address: addr, abi: PREDICTION_MARKET_ABI, functionName: "noBalances", args: [address] }),
     ]);
     setUserYes(yes as bigint);
     setUserNo(no as bigint);
-  }, [marketAddress, wallet]);
+  }, [marketAddress, address]);
 
   useEffect(() => {
     setLoading(true);
@@ -61,8 +61,8 @@ export default function MarketPage() {
   }, [loadMarket]);
 
   useEffect(() => {
-    if (wallet) void loadUserBalances();
-  }, [wallet, loadUserBalances]);
+    if (isConnected) void loadUserBalances();
+  }, [isConnected, loadUserBalances]);
 
   const refresh = () => {
     void loadMarket();
@@ -70,43 +70,30 @@ export default function MarketPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <Spinner size={32} />
-      </div>
-    );
+    return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
   }
 
   if (!market) {
-    return (
-      <div className="py-20 text-center text-gray-500">Market not found.</div>
-    );
+    return <div className="py-20 text-center text-gray-500">Market not found.</div>;
   }
 
   const catVariant = market.category === "DEPEG" ? "depeg" : "hack";
 
   return (
     <div>
-      {/* Back */}
       <Link href="/" className="mb-6 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-800">
         ← All Markets
       </Link>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* Left: market info */}
         <div className="space-y-6 lg:col-span-2">
-          {/* Header */}
           <div className="rounded-2xl border border-arc-border bg-arc-card p-6">
             <div className="mb-3 flex flex-wrap gap-2">
               <Badge label={market.category} variant={catVariant} />
               <Badge label={market.resolved ? "Resolved" : "Active"} variant={market.resolved ? "resolved" : "active"} />
             </div>
-            <h1 className="mb-4 text-xl font-bold leading-snug text-slate-900">
-              {market.question}
-            </h1>
+            <h1 className="mb-4 text-xl font-bold leading-snug text-slate-900">{market.question}</h1>
             <ProbabilityBar yesPrice={market.yesPrice} noPrice={market.noPrice} />
-
-            {/* Stats row */}
             <div className="mt-5 grid grid-cols-3 divide-x divide-arc-border rounded-xl border border-arc-border">
               {[
                 { label: "Liquidity", value: `${formatUsdc(market.totalCollateral)} USDC` },
@@ -121,8 +108,7 @@ export default function MarketPage() {
             </div>
           </div>
 
-          {/* User positions */}
-          {wallet && (userYes > 0n || userNo > 0n) && (
+          {isConnected && (userYes > 0n || userNo > 0n) && (
             <div className="rounded-2xl border border-arc-border bg-arc-card p-5">
               <h3 className="mb-3 text-sm font-semibold text-slate-600">Your Position</h3>
               <div className="flex gap-4">
@@ -142,35 +128,17 @@ export default function MarketPage() {
             </div>
           )}
 
-          {/* Liquidity panel */}
           {!market.resolved && (
-            <LiquidityPanel
-              marketAddress={marketAddress}
-              walletState={walletState}
-              onComplete={refresh}
-            />
+            <LiquidityPanel marketAddress={marketAddress} walletState={walletState} onComplete={refresh} />
           )}
         </div>
 
-        {/* Right: trading panel */}
         <div className="space-y-4">
           {market.resolved ? (
-            <RedeemPanel
-              market={market}
-              walletState={walletState}
-              userYesBalance={userYes}
-              userNoBalance={userNo}
-              onComplete={refresh}
-            />
+            <RedeemPanel market={market} walletState={walletState} userYesBalance={userYes} userNoBalance={userNo} onComplete={refresh} />
           ) : (
-            <TradePanel
-              marketAddress={marketAddress}
-              walletState={walletState}
-              onTxComplete={refresh}
-            />
+            <TradePanel marketAddress={marketAddress} walletState={walletState} onTxComplete={refresh} />
           )}
-
-          {/* Market contract link */}
           <a
             href={`https://testnet.arcscan.app/address/${marketAddress}`}
             target="_blank"
