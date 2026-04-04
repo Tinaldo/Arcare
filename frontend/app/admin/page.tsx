@@ -10,6 +10,20 @@ import { MARKET_FACTORY_ADDRESS, ARC_USDC_ADDRESS } from "@/lib/addresses";
 import { useContract, ERC20_ABI } from "@/lib/use-contract";
 
 type Roles = { isAdmin: boolean; isCreator: boolean };
+type ManagedMarket = {
+  address: `0x${string}`;
+  question: string;
+  category: string;
+  resolutionDeadline: bigint;
+};
+
+function formatAdminDeadline(deadline: bigint) {
+  return new Date(Number(deadline) * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export default function AdminPage() {
   const { isConnected, address, connect } = useWallet();
@@ -30,6 +44,13 @@ export default function AdminPage() {
   const [createStep, setCreateStep] = useState<string | null>(null);
   const [createError, setCreateError] = useState("");
   const [createDone, setCreateDone] = useState(false);
+
+  const [managedMarkets, setManagedMarkets] = useState<ManagedMarket[]>([]);
+  const [loadingMarkets, setLoadingMarkets] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState("");
+  const [removeStep, setRemoveStep] = useState<string | null>(null);
+  const [removeError, setRemoveError] = useState("");
+  const [removeDone, setRemoveDone] = useState("");
 
   const [roleTarget, setRoleTarget] = useState("");
   const [roleStep, setRoleStep] = useState<string | null>(null);
@@ -80,6 +101,61 @@ export default function AdminPage() {
     if (isConnected) void loadRoles();
   }, [isConnected, loadRoles]);
 
+  const loadManagedMarkets = useCallback(async () => {
+    if (MARKET_FACTORY_ADDRESS === "0x0") return;
+    setLoadingMarkets(true);
+    try {
+      const count = await arcClient.readContract({
+        address: MARKET_FACTORY_ADDRESS,
+        abi: MARKET_FACTORY_ABI,
+        functionName: "getMarketCount",
+      });
+
+      if (count === 0n) {
+        setManagedMarkets([]);
+        return;
+      }
+
+      const addresses = (await arcClient.readContract({
+        address: MARKET_FACTORY_ADDRESS,
+        abi: MARKET_FACTORY_ABI,
+        functionName: "getMarkets",
+        args: [0n, count],
+      })) as `0x${string}`[];
+
+      const markets = await Promise.all(
+        addresses.map(async (marketAddress) => {
+          const info = await arcClient.readContract({
+            address: MARKET_FACTORY_ADDRESS,
+            abi: MARKET_FACTORY_ABI,
+            functionName: "getMarketInfo",
+            args: [marketAddress],
+          }) as {
+            question: string;
+            category: string;
+            createdAt: bigint;
+            resolutionDeadline: bigint;
+          };
+
+          return {
+            address: marketAddress,
+            question: info.question,
+            category: info.category,
+            resolutionDeadline: info.resolutionDeadline,
+          } satisfies ManagedMarket;
+        })
+      );
+
+      setManagedMarkets(markets);
+    } finally {
+      setLoadingMarkets(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isConnected) void loadManagedMarkets();
+  }, [isConnected, loadManagedMarkets]);
+
   const handleCreateMarket = async () => {
     if (!isConnected) { connect(); return; }
     setCreateError("");
@@ -103,9 +179,58 @@ export default function AdminPage() {
       setQuestion("");
       setDeadline("");
       setLiquidity("10");
+      void loadManagedMarkets();
     } catch (e: unknown) {
       setCreateError((e as Error).message ?? "Failed to create market");
       setCreateStep(null);
+    }
+  };
+
+  const handleRemoveMarket = async (marketAddress?: string) => {
+    const target = (marketAddress ?? removeTarget).trim();
+    if (!isConnected) { connect(); return; }
+    if (!target.startsWith("0x") || target.length !== 42) {
+      setRemoveError("Enter a valid market address");
+      return;
+    }
+
+    setRemoveError("");
+    setRemoveDone("");
+    setRemoveStep("Removing market from registry…");
+
+    try {
+      await factory.write("removeMarket", [target]);
+      setRemoveDone(`Market removed: ${target.slice(0, 10)}…`);
+      setRemoveTarget("");
+      await loadManagedMarkets();
+    } catch (e: unknown) {
+      setRemoveError((e as Error).message ?? "Failed to remove market");
+    } finally {
+      setRemoveStep(null);
+    }
+  };
+
+  const handleDeleteMarket = async (marketAddress?: string) => {
+    const target = (marketAddress ?? removeTarget).trim();
+    if (!isConnected) { connect(); return; }
+    if (!target.startsWith("0x") || target.length !== 42) {
+      setRemoveError("Enter a valid market address");
+      return;
+    }
+
+    setRemoveError("");
+    setRemoveDone("");
+    setRemoveStep("Refunding owner and deleting market…");
+
+    try {
+      await factory.write("deleteMarket", [target]);
+      setRemoveDone(`Market deleted and refunded: ${target.slice(0, 10)}…`);
+      setRemoveTarget("");
+      await loadManagedMarkets();
+    } catch (e: unknown) {
+      setRemoveError((e as Error).message ?? "Failed to delete market");
+    } finally {
+      setRemoveStep(null);
     }
   };
 
@@ -270,6 +395,106 @@ export default function AdminPage() {
       )}
 
       {/* Role Management */}
+      {roles.isAdmin && (
+        <div className="glass-card p-6 space-y-5">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <span className="material-symbols-outlined text-[20px] text-[#745BFF]">delete</span>
+            Market Registry
+          </h2>
+
+          <div className="rounded-xl border border-orange-500/20 bg-orange-500/5 p-4 text-sm text-slate-600">
+            Delete refunds the market owner and unregisters the market, but only if there are no trader positions and no external LPs. Remove only unregisters the market and does not refund collateral.
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Manual Market Address</label>
+            <div className="flex gap-3">
+              <input
+                className="arc-input flex-1"
+                placeholder="0x…"
+                value={removeTarget}
+                onChange={(e) => setRemoveTarget(e.target.value)}
+              />
+              <button
+                onClick={() => void handleDeleteMarket()}
+                disabled={!!removeStep}
+                className="rounded-full border border-no-red px-5 py-2.5 text-sm font-bold text-no-red hover:bg-no-red/5 transition-colors disabled:opacity-50"
+              >
+                Delete
+              </button>
+              <button
+                onClick={() => void handleRemoveMarket()}
+                disabled={!!removeStep}
+                className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Current Registered Markets
+              </p>
+              {loadingMarkets && <Spinner size={16} />}
+            </div>
+
+            {managedMarkets.length === 0 ? (
+              <div className="rounded-xl border border-[rgba(116,91,255,0.12)] bg-[rgba(116,91,255,0.04)] p-4 text-sm text-slate-500">
+                No registered markets.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {managedMarkets.map((market) => (
+                  <div
+                    key={market.address}
+                    className="flex flex-col gap-3 rounded-xl border border-[rgba(116,91,255,0.12)] bg-[rgba(116,91,255,0.04)] p-4 lg:flex-row lg:items-center lg:justify-between"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-semibold text-slate-900">{market.question}</p>
+                      <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                        <span>{market.category}</span>
+                        <span>Deadline: {formatAdminDeadline(market.resolutionDeadline)}</span>
+                      </div>
+                      <code className="block break-all text-xs text-[#745BFF]">{market.address}</code>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => void handleDeleteMarket(market.address)}
+                        disabled={!!removeStep}
+                        className="rounded-full border border-no-red px-4 py-2 text-sm font-bold text-no-red hover:bg-no-red/5 transition-colors disabled:opacity-50"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        onClick={() => void handleRemoveMarket(market.address)}
+                        disabled={!!removeStep}
+                        className="rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {removeDone && (
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-yes-green">
+              <span className="material-symbols-outlined text-[16px]">check_circle</span>
+              {removeDone}
+            </p>
+          )}
+          {removeError && (
+            <p className="rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-sm text-red-500">
+              {removeError}
+            </p>
+          )}
+        </div>
+      )}
+
       {roles.isAdmin && (
         <div className="glass-card p-6 space-y-5">
           <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">

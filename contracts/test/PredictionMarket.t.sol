@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {PredictionMarket} from "../src/PredictionMarket.sol";
@@ -328,6 +328,58 @@ contract PredictionMarketTest is Test {
     function test_Factory_MarketInfo() public view {
         MarketFactory.MarketInfo memory info = factory.getMarketInfo(address(market));
         assertEq(info.category, "DEPEG");
+    }
+
+    function test_Factory_RemoveMarket() public {
+        factory.removeMarket(address(market));
+
+        assertEq(factory.getMarketCount(), 0);
+        address[] memory markets = factory.getMarkets(0, 10);
+        assertEq(markets.length, 0);
+        assertFalse(factory.isMarket(address(market)));
+    }
+
+    function test_Factory_RemoveMarket_OnlyAdmin() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        factory.removeMarket(address(market));
+    }
+
+    function test_Factory_RemoveMarket_UnknownMarket() public {
+        vm.expectRevert(MarketFactory.UnknownMarket.selector);
+        factory.removeMarket(address(0xdead));
+    }
+
+    function test_Factory_DeleteMarket_RefundsOwner() public {
+        uint256 ownerUsdcBefore = usdc.balanceOf(owner);
+
+        factory.deleteMarket(address(market));
+
+        assertEq(factory.getMarketCount(), 0);
+        assertEq(usdc.balanceOf(owner), ownerUsdcBefore + INIT_LIQ);
+        assertEq(market.totalCollateral(), 0);
+        assertEq(market.totalLPShares(), 0);
+        assertTrue(market.resolved());
+    }
+
+    function test_Factory_DeleteMarket_RevertsWithOpenInterest() public {
+        vm.prank(alice);
+        market.buyOutcome(true, 100e6, 0);
+
+        vm.expectRevert(PredictionMarket.OpenInterestExists.selector);
+        factory.deleteMarket(address(market));
+    }
+
+    function test_Factory_DeleteMarket_RevertsWithExternalLiquidity() public {
+        uint256 addAmount = 500e6;
+        usdc.mint(alice, addAmount);
+        vm.prank(alice);
+        usdc.approve(address(market), addAmount);
+        vm.prank(alice);
+        market.addLiquidity(addAmount);
+
+        vm.expectRevert(PredictionMarket.ExternalLiquidityExists.selector);
+        factory.deleteMarket(address(market));
     }
 
     function test_Factory_InvalidDeadline() public {

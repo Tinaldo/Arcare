@@ -56,6 +56,20 @@ export const MARKET_FACTORY_ABI = [
   },
   {
     type: "function",
+    name: "removeMarket",
+    inputs: [{ name: "market", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "deleteMarket",
+    inputs: [{ name: "market", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "getMarketCount",
     inputs: [],
     outputs: [{ type: "uint256" }],
@@ -72,6 +86,24 @@ export const MARKET_FACTORY_ABI = [
     stateMutability: "view",
   },
   {
+    type: "function",
+    name: "getMarketInfo",
+    inputs: [{ name: "market", type: "address" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "question", type: "string" },
+          { name: "category", type: "string" },
+          { name: "createdAt", type: "uint256" },
+          { name: "resolutionDeadline", type: "uint256" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
     type: "event",
     name: "MarketCreated",
     inputs: [
@@ -80,6 +112,23 @@ export const MARKET_FACTORY_ABI = [
       { name: "category", type: "string", indexed: false },
       { name: "resolutionDeadline", type: "uint256", indexed: false },
       { name: "creator", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "MarketDeleted",
+    inputs: [
+      { name: "market", type: "address", indexed: true },
+      { name: "deletedBy", type: "address", indexed: true },
+      { name: "usdcRefunded", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "MarketRemoved",
+    inputs: [
+      { name: "market", type: "address", indexed: true },
+      { name: "removedBy", type: "address", indexed: true },
     ],
   },
 ] as const;

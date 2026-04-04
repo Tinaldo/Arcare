@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.20;
 
 import {IERC20} from "./interfaces/IERC20.sol";
 
@@ -42,6 +42,8 @@ contract PredictionMarket {
     mapping(address => uint256) public lpShares;
     uint256 public totalLPShares;
     uint256 public totalCollateral;
+    uint256 public yesOpenInterest;
+    uint256 public noOpenInterest;
 
     // Resolution
     bool public resolved;
@@ -55,6 +57,7 @@ contract PredictionMarket {
     event OutcomeSold(address indexed seller, bool isYes, uint256 tokensIn, uint256 usdcOut);
     event MarketResolved(bool yesWins);
     event Redeemed(address indexed winner, uint256 tokensRedeemed, uint256 usdcOut);
+    event MarketDeleted(address indexed owner, uint256 usdcRefunded);
 
     // ─── Errors ───────────────────────────────────────────────────────────────
 
@@ -65,6 +68,9 @@ contract PredictionMarket {
     error ZeroAmount();
     error InsufficientBalance();
     error NothingToRedeem();
+    error NotFactory();
+    error OpenInterestExists();
+    error ExternalLiquidityExists();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -111,6 +117,11 @@ contract PredictionMarket {
 
     modifier notResolved() {
         if (resolved) revert MarketAlreadyResolved();
+        _;
+    }
+
+    modifier onlyFactory() {
+        if (msg.sender != factory) revert NotFactory();
         _;
     }
 
@@ -184,11 +195,13 @@ contract PredictionMarket {
             yesReserve = k / newNo;
             noReserve = newNo;
             yesBalances[msg.sender] += tokensOut;
+            yesOpenInterest += tokensOut;
         } else {
             uint256 newYes = yesReserve + usdcIn;
             noReserve = k / newYes;
             yesReserve = newYes;
             noBalances[msg.sender] += tokensOut;
+            noOpenInterest += tokensOut;
         }
 
         totalCollateral += usdcIn;
@@ -225,10 +238,12 @@ contract PredictionMarket {
             yesReserve = yesReserve + tokensIn - usdcOut;
             noReserve = noReserve - usdcOut;
             yesBalances[msg.sender] -= tokensIn;
+            yesOpenInterest -= tokensIn;
         } else {
             yesReserve = yesReserve - usdcOut;
             noReserve = noReserve + tokensIn - usdcOut;
             noBalances[msg.sender] -= tokensIn;
+            noOpenInterest -= tokensIn;
         }
 
         totalCollateral -= usdcOut;
@@ -256,14 +271,42 @@ contract PredictionMarket {
             tokens = yesBalances[msg.sender];
             if (tokens == 0) revert NothingToRedeem();
             yesBalances[msg.sender] = 0;
+            yesOpenInterest -= tokens;
         } else {
             tokens = noBalances[msg.sender];
             if (tokens == 0) revert NothingToRedeem();
             noBalances[msg.sender] = 0;
+            noOpenInterest -= tokens;
         }
 
         usdc.transfer(msg.sender, tokens);
         emit Redeemed(msg.sender, tokens, tokens);
+    }
+
+    /// @notice Permanently freeze the market and refund all collateral to the owner.
+    ///         Only the factory can call this, and only when no trader positions or external LPs exist.
+    function deleteAndRefundOwner() external onlyFactory notResolved returns (uint256 usdcOut) {
+        if (yesOpenInterest != 0 || noOpenInterest != 0) revert OpenInterestExists();
+
+        uint256 ownerShares = lpShares[owner];
+        if (ownerShares != totalLPShares) revert ExternalLiquidityExists();
+
+        usdcOut = totalCollateral;
+
+        resolved = true;
+        yesWins = false;
+        yesReserve = 0;
+        noReserve = 0;
+        totalCollateral = 0;
+        totalLPShares = 0;
+        lpShares[owner] = 0;
+
+        if (usdcOut > 0) {
+            usdc.transfer(owner, usdcOut);
+            emit LiquidityRemoved(owner, ownerShares, usdcOut);
+        }
+
+        emit MarketDeleted(owner, usdcOut);
     }
 
     // ─── View functions ───────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 import { useAccount, useDisconnect, useBalance } from 'wagmi'
 import { useAppKit } from '@reown/appkit/react'
-import { arcTestnet } from '@/lib/arc-client'
+import { arcTestnet, formatTokenAmount } from '@/lib/arc-client'
 
 export interface WalletState {
   address: `0x${string}` | undefined
@@ -25,7 +25,7 @@ export function useWallet(): WalletState {
     address,
     isConnected,
     isOnArc,
-    balance: balance ? (Number(balance.value) / 10 ** balance.decimals).toFixed(2) : undefined,
+    balance: balance ? formatTokenAmount(balance.value, balance.decimals, 2) : undefined,
     connect: () => open(),
     disconnect,
   }

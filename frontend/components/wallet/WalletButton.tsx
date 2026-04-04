@@ -20,7 +20,7 @@ export function WalletButton() {
         )}
         {balance !== undefined && (
           <span className="hidden text-sm font-semibold text-slate-700 sm:block">
-            {parseFloat(balance).toFixed(2)} USDC
+            {balance} USDC
           </span>
         )}
         <div className="flex items-center gap-2 rounded-full border border-[rgba(116,91,255,0.2)] bg-white/70 px-4 py-2 shadow-sm">
