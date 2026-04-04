@@ -146,3 +146,69 @@ export async function redeemChallenge(
   });
   return res.json() as Promise<{ challengeId: string }>;
 }
+
+export async function createMarketChallenge(
+  userToken: string,
+  walletId: string,
+  factoryAddress: string,
+  question: string,
+  category: string,
+  resolutionDeadline: string,
+  initialLiquidityUsdc: string
+) {
+  const res = await fetch("/api/markets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "createMarket",
+      userToken,
+      walletId,
+      factoryAddress,
+      question,
+      category,
+      resolutionDeadline,
+      initialLiquidityUsdc,
+    }),
+  });
+  return res.json() as Promise<{ challengeId: string }>;
+}
+
+export async function grantMarketCreatorChallenge(
+  userToken: string,
+  walletId: string,
+  factoryAddress: string,
+  targetAddress: string
+) {
+  const res = await fetch("/api/markets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "grantMarketCreator",
+      userToken,
+      walletId,
+      factoryAddress,
+      targetAddress,
+    }),
+  });
+  return res.json() as Promise<{ challengeId: string }>;
+}
+
+export async function revokeMarketCreatorChallenge(
+  userToken: string,
+  walletId: string,
+  factoryAddress: string,
+  targetAddress: string
+) {
+  const res = await fetch("/api/markets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "revokeMarketCreator",
+      userToken,
+      walletId,
+      factoryAddress,
+      targetAddress,
+    }),
+  });
+  return res.json() as Promise<{ challengeId: string }>;
+}

@@ -3,7 +3,7 @@ import { createPublicClient, http, defineChain } from "viem";
 // Arc Testnet — Circle's EVM chain where USDC is the native gas token.
 // Chain ID sourced from Circle documentation.
 export const arcTestnet = defineChain({
-  id: 2355,
+  id: 5042002,
   name: "Arc Testnet",
   nativeCurrency: {
     name: "USD Coin",

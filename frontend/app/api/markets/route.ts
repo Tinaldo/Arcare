@@ -144,6 +144,32 @@ export async function POST(request: Request) {
         return NextResponse.json(result);
       }
 
+      // ── Grant MARKET_CREATOR_ROLE ──────────────────────────────────────────
+      case "grantMarketCreator": {
+        const { factoryAddress, targetAddress } = params;
+        const result = await contractExecution(
+          userToken,
+          walletId,
+          factoryAddress,
+          "grantMarketCreator(address)",
+          [targetAddress]
+        );
+        return NextResponse.json(result);
+      }
+
+      // ── Revoke MARKET_CREATOR_ROLE ─────────────────────────────────────────
+      case "revokeMarketCreator": {
+        const { factoryAddress, targetAddress } = params;
+        const result = await contractExecution(
+          userToken,
+          walletId,
+          factoryAddress,
+          "revokeMarketCreator(address)",
+          [targetAddress]
+        );
+        return NextResponse.json(result);
+      }
+
       default:
         return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
     }

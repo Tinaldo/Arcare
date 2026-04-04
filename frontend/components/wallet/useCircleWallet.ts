@@ -12,6 +12,12 @@ import {
 
 const APP_ID = process.env.NEXT_PUBLIC_CIRCLE_APP_ID as string;
 
+const SESSION = {
+  userToken:     "insurarc_userToken",
+  encryptionKey: "insurarc_encKey",
+  wallet:        "insurarc_wallet",
+};
+
 export interface CircleWallet {
   id: string;
   address: string;
@@ -52,6 +58,20 @@ export function useCircleWallet(): CircleWalletState {
   const [usdcBalance, setUsdcBalance] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
 
+  // Restore session from sessionStorage on mount
+  useEffect(() => {
+    try {
+      const token   = sessionStorage.getItem(SESSION.userToken);
+      const encKey  = sessionStorage.getItem(SESSION.encryptionKey);
+      const walletJ = sessionStorage.getItem(SESSION.wallet);
+      if (token && encKey && walletJ) {
+        setUserToken(token);
+        setEncryptionKey(encKey);
+        setWallet(JSON.parse(walletJ) as CircleWallet);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   // Init SDK
   useEffect(() => {
     const init = async () => {
@@ -88,8 +108,16 @@ export function useCircleWallet(): CircleWalletState {
     (challengeId: string): Promise<void> => {
       return new Promise((resolve, reject) => {
         const sdk = sdkRef.current;
-        if (!sdk || !userToken || !encryptionKey) {
-          reject(new Error("SDK not ready or not authenticated"));
+        if (!sdk || !sdkReady) {
+          reject(new Error("Circle SDK is still initializing — wait a moment and try again"));
+          return;
+        }
+        if (!userToken || !encryptionKey) {
+          reject(new Error("Session expired — please sign in again"));
+          return;
+        }
+        if (!challengeId) {
+          reject(new Error("No challenge returned — check your USDC balance and try again"));
           return;
         }
         sdk.setAuthentication({ userToken, encryptionKey });
@@ -103,7 +131,7 @@ export function useCircleWallet(): CircleWalletState {
         });
       });
     },
-    [userToken, encryptionKey]
+    [userToken, encryptionKey, sdkReady]
   );
 
   const handleCreateUser = useCallback(async (uid: string) => {
@@ -143,6 +171,9 @@ export function useCircleWallet(): CircleWalletState {
       setUserToken(token);
       setEncryptionKey(encKey);
       setShowModal(false);
+      sessionStorage.setItem(SESSION.userToken,     token);
+      sessionStorage.setItem(SESSION.encryptionKey, encKey);
+      sessionStorage.setItem(SESSION.wallet,        JSON.stringify(w));
     },
     []
   );
@@ -153,6 +184,9 @@ export function useCircleWallet(): CircleWalletState {
     setEncryptionKey(null);
     setUsdcBalance(null);
     setUserId(null);
+    sessionStorage.removeItem(SESSION.userToken);
+    sessionStorage.removeItem(SESSION.encryptionKey);
+    sessionStorage.removeItem(SESSION.wallet);
   }, []);
 
   return {

@@ -28,6 +28,11 @@ export function Navbar({ walletState }: Props) {
           <Link href="/" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
             Markets
           </Link>
+          {walletState.isConnected && (
+            <Link href="/admin" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
+              Admin
+            </Link>
+          )}
         </div>
 
         {/* Wallet */}

@@ -51,3 +51,4 @@ body {
 }
 .arc-input:focus { border-color: var(--color-arc-blue); }
 .arc-input::placeholder { color: #9CA3AF; }
+select.arc-input { appearance: none; cursor: pointer; }
