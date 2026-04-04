@@ -1,0 +1,6 @@
+export const MARKET_FACTORY_ADDRESS =
+  (process.env.NEXT_PUBLIC_MARKET_FACTORY_ADDRESS || "0x0") as `0x${string}`;
+
+export const ARC_USDC_ADDRESS =
+  (process.env.NEXT_PUBLIC_ARC_USDC_ADDRESS as `0x${string}`) ??
+  "0x36000000000000000000000000000000000000Ff";
