@@ -2,23 +2,31 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Spinner } from "@/components/ui/Spinner";
-import { parseUsdc, arcClient, formatUsdc } from "@/lib/arc-client";
+import { arcClient, formatStableAmount, parseStableAmount } from "@/lib/arc-client";
 import { PREDICTION_MARKET_ABI } from "@/lib/abis";
-import { ARC_USDC_ADDRESS } from "@/lib/addresses";
 import { useContract, ERC20_ABI } from "@/lib/use-contract";
 import type { WalletState } from "@/components/wallet/useWallet";
 
 interface Props {
   marketAddress: string;
+  collateralAddress: `0x${string}`;
+  collateralSymbol: string;
   walletState: WalletState;
   resolved?: boolean;
   onComplete?: () => void;
 }
 
-export function LiquidityPanel({ marketAddress, walletState, resolved = false, onComplete }: Props) {
+export function LiquidityPanel({
+  marketAddress,
+  collateralAddress,
+  collateralSymbol,
+  walletState,
+  resolved = false,
+  onComplete,
+}: Props) {
   const { isConnected, connect, address } = walletState;
   const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI);
-  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
+  const collateral = useContract(collateralAddress, ERC20_ABI);
 
   const [amount, setAmount] = useState("");
   const [txStep, setTxStep] = useState<string | null>(null);
@@ -50,13 +58,13 @@ export function LiquidityPanel({ marketAddress, walletState, resolved = false, o
 
   const handleAdd = async () => {
     if (!isConnected) { connect(); return; }
-    const amtBig = parseUsdc(amount);
+    const amtBig = parseStableAmount(amount);
     if (amtBig === 0n) { setError("Enter an amount"); return; }
     setError(null);
 
     try {
-      setTxStep("Step 1 of 2: Approve USDC…");
-      await usdc.write("approve", [marketAddress, amtBig]);
+      setTxStep(`Step 1 of 2: Approve ${collateralSymbol}…`);
+      await collateral.write("approve", [marketAddress, amtBig]);
       setTxStep("Step 2 of 2: Add liquidity…");
       await market.write("addLiquidity", [amtBig]);
       setAmount("");
@@ -101,7 +109,7 @@ export function LiquidityPanel({ marketAddress, walletState, resolved = false, o
           <>
             <div className="rounded-xl bg-[rgba(116,91,255,0.05)] border border-[rgba(116,91,255,0.1)] px-4 py-3 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-widest text-slate-400">LP Shares</span>
-              <span className="text-sm font-bold text-slate-800">{formatUsdc(lpShares)}</span>
+              <span className="text-sm font-bold text-slate-800">{formatStableAmount(lpShares)}</span>
             </div>
             <button
               onClick={handleRemove}
@@ -145,7 +153,7 @@ export function LiquidityPanel({ marketAddress, walletState, resolved = false, o
       {open && (
         <div className="border-t border-[rgba(116,91,255,0.12)] px-5 pb-5 pt-4 space-y-3">
           <p className="text-xs text-slate-500">
-            Provide USDC to earn trading fees. LP shares are redeemable proportionally.
+            Provide {collateralSymbol} to earn trading fees. LP shares are redeemable proportionally.
           </p>
           <div className="flex items-center gap-2 rounded-xl border border-[rgba(116,91,255,0.2)] bg-white/80 px-4 py-3">
             <input
@@ -156,7 +164,7 @@ export function LiquidityPanel({ marketAddress, walletState, resolved = false, o
               onChange={(e) => setAmount(e.target.value)}
               className="flex-1 bg-transparent text-lg font-bold text-slate-800 outline-none placeholder:text-slate-300 placeholder:font-normal"
             />
-            <span className="text-sm font-semibold text-slate-400">USDC</span>
+            <span className="text-sm font-semibold text-slate-400">{collateralSymbol}</span>
           </div>
           <button
             onClick={handleAdd}
@@ -174,7 +182,7 @@ export function LiquidityPanel({ marketAddress, walletState, resolved = false, o
           {lpShares > 0n && (
             <div className="border-t border-[rgba(116,91,255,0.08)] pt-3 space-y-2">
               <p className="text-xs text-slate-500">
-                Your shares: <span className="font-semibold text-slate-700">{formatUsdc(lpShares)}</span>
+                Your shares: <span className="font-semibold text-slate-700">{formatStableAmount(lpShares)}</span>
               </p>
               <button
                 onClick={handleRemove}

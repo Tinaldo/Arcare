@@ -19,7 +19,7 @@ contract MarketFactory is AccessControl {
 
     // ─── State ────────────────────────────────────────────────────────────────
 
-    IERC20 public immutable usdc;
+    IERC20 public immutable collateral;
     PriceRouter public priceRouter;
 
     address[] public allMarkets;
@@ -46,7 +46,7 @@ contract MarketFactory is AccessControl {
         address indexed priceFeed,
         address indexed creator
     );
-    event MarketDeleted(address indexed market, address indexed deletedBy, uint256 usdcRefunded);
+    event MarketDeleted(address indexed market, address indexed deletedBy, uint256 collateralRefunded);
     event MarketRemoved(address indexed market, address indexed removedBy);
     event RouterUpdated(address indexed oldRouter, address indexed newRouter);
 
@@ -59,10 +59,10 @@ contract MarketFactory is AccessControl {
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    /// @param _usdc        USDC token address on Arc Testnet
+    /// @param _collateral  ERC20 collateral token (USDC, EURC, …)
     /// @param _priceRouter PriceRouter address (pass address(0) to disable routing)
-    constructor(address _usdc, address _priceRouter) {
-        usdc = IERC20(_usdc);
+    constructor(address _collateral, address _priceRouter) {
+        collateral = IERC20(_collateral);
         priceRouter = PriceRouter(_priceRouter);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MARKET_CREATOR_ROLE, msg.sender);
@@ -82,48 +82,48 @@ contract MarketFactory is AccessControl {
 
     /// @notice Deploy a new prediction market.
     ///         Caller must have MARKET_CREATOR_ROLE and have approved this factory
-    ///         to spend `initialLiquidityUsdc` USDC.
+    ///         to spend `initialLiquidity` collateral tokens.
     ///         If a priceFeed is provided and PriceRouter is set, the market is
     ///         automatically registered in the router.
     ///
-    /// @param question              Human-readable question
-    /// @param category              "DEPEG" or "HACK"
-    /// @param resolutionDeadline    Unix timestamp
-    /// @param initialLiquidityUsdc  USDC (6 decimals) to seed the AMM pool
-    /// @param priceFeed             Chainlink feed address this market tracks.
-    ///                              Pass address(0) if not linked to a feed.
+    /// @param question           Human-readable question
+    /// @param category           "DEPEG" or "HACK"
+    /// @param resolutionDeadline Unix timestamp
+    /// @param initialLiquidity   Collateral (6 decimals) to seed the AMM pool
+    /// @param priceFeed          Chainlink feed address this market tracks.
+    ///                           Pass address(0) if not linked to a feed.
     function createMarket(
         string calldata question,
         string calldata category,
         uint256 resolutionDeadline,
-        uint256 initialLiquidityUsdc,
+        uint256 initialLiquidity,
         address priceFeed
     ) external onlyRole(MARKET_CREATOR_ROLE) returns (address market) {
-        if (initialLiquidityUsdc == 0) revert ZeroLiquidity();
+        if (initialLiquidity == 0) revert ZeroLiquidity();
         if (resolutionDeadline <= block.timestamp) revert InvalidDeadline();
 
-        if (!usdc.transferFrom(msg.sender, address(this), initialLiquidityUsdc)) {
+        if (!collateral.transferFrom(msg.sender, address(this), initialLiquidity)) {
             revert ERC20TransferFailed();
         }
 
         PredictionMarket pm = new PredictionMarket(
             msg.sender,
-            address(usdc),
+            address(collateral),
             question,
             category,
             resolutionDeadline,
-            initialLiquidityUsdc
+            initialLiquidity
         );
         market = address(pm);
 
-        if (!usdc.transfer(market, initialLiquidityUsdc)) {
+        if (!collateral.transfer(market, initialLiquidity)) {
             revert ERC20TransferFailed();
         }
 
         allMarkets.push(market);
-        isMarket[market] = true;
+        isMarket[market]    = true;
         marketIndex[market] = allMarkets.length - 1;
-        marketInfo[market] = MarketInfo({
+        marketInfo[market]  = MarketInfo({
             question:           question,
             category:           category,
             createdAt:          block.timestamp,
@@ -152,9 +152,9 @@ contract MarketFactory is AccessControl {
 
     function deleteMarket(address market) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (!isMarket[market]) revert UnknownMarket();
-        uint256 usdcRefunded = PredictionMarket(payable(market)).deleteAndRefundOwner();
+        uint256 collateralRefunded = PredictionMarket(payable(market)).deleteAndRefundOwner();
         _removeMarketFromRegistry(market);
-        emit MarketDeleted(market, msg.sender, usdcRefunded);
+        emit MarketDeleted(market, msg.sender, collateralRefunded);
     }
 
     function _removeMarketFromRegistry(address market) internal {

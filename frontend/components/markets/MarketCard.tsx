@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ProbabilityBar } from "./ProbabilityBar";
-import { formatUsdc, parseDepegThreshold } from "@/lib/arc-client";
+import { TokenLogo } from "@/components/tokens/TokenLogo";
+import { formatStableAmount, parseDepegThreshold } from "@/lib/arc-client";
 import type { MarketOnChain } from "@/lib/types";
 
 interface Props {
@@ -44,18 +45,24 @@ export function MarketCard({ market }: Props) {
 
         {/* Header row */}
         <div className="mb-3 flex items-center justify-between">
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
-              isHack
-                ? "bg-red-500/10 text-red-500"
-                : "bg-[#745BFF]/10 text-[#745BFF]"
-            }`}
-          >
-            <span className="material-symbols-outlined text-[12px]">
-              {isHack ? "bug_report" : "currency_exchange"}
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                isHack
+                  ? "bg-red-500/10 text-red-500"
+                  : "bg-[#745BFF]/10 text-[#745BFF]"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[12px]">
+                {isHack ? "bug_report" : "currency_exchange"}
+              </span>
+              {market.category}
             </span>
-            {market.category}
-          </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900/5 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <TokenLogo symbol={market.collateralSymbol} size={14} />
+              {market.collateralSymbol}
+            </span>
+          </div>
 
           <div className="flex items-center gap-1.5">
             <span
@@ -97,8 +104,8 @@ export function MarketCard({ market }: Props) {
         {/* Footer */}
         <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
           <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px]">water_drop</span>
-            {formatUsdc(market.totalCollateral)} USDC
+            <TokenLogo symbol={market.collateralSymbol} size={14} />
+            {formatStableAmount(market.totalCollateral)} {market.collateralSymbol}
           </span>
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-[14px]">schedule</span>

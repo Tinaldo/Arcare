@@ -11,12 +11,14 @@ import { ProbabilityBar } from "@/components/markets/ProbabilityBar";
 import { TradePanel } from "@/components/markets/TradePanel";
 import { LiquidityPanel } from "@/components/markets/LiquidityPanel";
 import { RedeemPanel } from "@/components/markets/RedeemPanel";
+import { TokenLogo } from "@/components/tokens/TokenLogo";
 import { YesNoPriceChart } from "@/components/charts/YesNoPriceChart";
 import { StablecoinPriceChart } from "@/components/charts/StablecoinPriceChart";
 import { DepegGauge } from "@/components/charts/DepegGauge";
 import { useWallet } from "@/components/wallet/WalletContext";
-import { arcClient, formatUsdc, parseDepegThreshold } from "@/lib/arc-client";
+import { arcClient, formatStableAmount, parseDepegThreshold } from "@/lib/arc-client";
 import { PREDICTION_MARKET_ABI } from "@/lib/abis";
+import { loadAllMarkets, loadMarketByAddress } from "@/lib/markets";
 import type { MarketOnChain } from "@/lib/types";
 
 const sepoliaClient = createPublicClient({
@@ -59,6 +61,7 @@ export default function MarketPage() {
   const { address, isConnected } = walletState;
 
   const [market, setMarket] = useState<MarketOnChain | null>(null);
+  const [currencyMarkets, setCurrencyMarkets] = useState<MarketOnChain[]>([]);
   const [loading, setLoading] = useState(true);
   const [userYes, setUserYes] = useState(0n);
   const [userNo, setUserNo] = useState(0n);
@@ -66,14 +69,26 @@ export default function MarketPage() {
 
   const loadMarket = useCallback(async () => {
     const addr = marketAddress as `0x${string}`;
-    const info = await arcClient.readContract({
-      address: addr,
-      abi: PREDICTION_MARKET_ABI,
-      functionName: "getMarketInfo",
-    });
-    const [question, category, deadline, resolved, yesWins, yesReserve, noReserve, totalCollateral, yesPrice, noPrice] =
-      info as [string, string, bigint, boolean, boolean, bigint, bigint, bigint, bigint, bigint];
-    setMarket({ address: marketAddress, question, category, deadline, resolved, yesWins, yesReserve, noReserve, totalCollateral, yesPrice, noPrice });
+    const [loadedMarket, allMarkets] = await Promise.all([
+      loadMarketByAddress(addr),
+      loadAllMarkets(),
+    ]);
+
+    setMarket(loadedMarket);
+
+    if (!loadedMarket) {
+      setCurrencyMarkets([]);
+      return;
+    }
+
+    const related = allMarkets.filter((candidate) => candidate.pairKey === loadedMarket.pairKey);
+    const deduped = related.some((candidate) => candidate.address === loadedMarket.address)
+      ? related
+      : [...related, loadedMarket];
+
+    setCurrencyMarkets(
+      [...deduped].sort((left, right) => left.collateralSymbol.localeCompare(right.collateralSymbol))
+    );
   }, [marketAddress]);
 
   const loadUserBalances = useCallback(async () => {
@@ -153,8 +168,37 @@ export default function MarketPage() {
             <div className="mb-3 flex flex-wrap gap-2">
               <Badge label={market.category} variant={catVariant} />
               <Badge label={market.resolved ? "Resolved" : "Active"} variant={market.resolved ? "resolved" : "active"} />
+              <span className="inline-flex items-center gap-2 rounded-full bg-slate-900/5 px-3 py-1 text-xs font-bold uppercase tracking-widest text-slate-500">
+                <TokenLogo symbol={market.collateralSymbol} size={16} />
+                {market.collateralSymbol}
+              </span>
             </div>
             <h1 className="mb-4 text-xl font-extrabold leading-snug text-slate-900">{market.question}</h1>
+
+            {currencyMarkets.length > 1 && (
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-2xl border border-[rgba(116,91,255,0.12)] bg-[rgba(116,91,255,0.05)] p-2">
+                <span className="px-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  Currency
+                </span>
+                {currencyMarkets.map((currencyMarket) => {
+                  const active = currencyMarket.address === market.address;
+                  return (
+                    <Link
+                      key={currencyMarket.address}
+                      href={`/markets/${currencyMarket.address}`}
+                      className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-bold uppercase tracking-widest transition-all ${
+                        active
+                          ? "bg-slate-900 text-white shadow-sm"
+                          : "bg-white/80 text-slate-500 hover:text-slate-900"
+                      }`}
+                    >
+                      <TokenLogo symbol={currencyMarket.collateralSymbol} size={16} />
+                      {currencyMarket.collateralSymbol}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Big probability display */}
             <div className="mb-4 flex items-baseline gap-2">
@@ -166,7 +210,16 @@ export default function MarketPage() {
 
             <div className={`mt-5 grid gap-3 ${depegThreshold ? "grid-cols-4" : "grid-cols-3"}`}>
               {[
-                { icon: "water_drop", label: "Liquidity", value: `${formatUsdc(market.totalCollateral)} USDC` },
+                {
+                  icon: "water_drop",
+                  label: "Liquidity",
+                  value: (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <TokenLogo symbol={market.collateralSymbol} size={16} />
+                      {formatStableAmount(market.totalCollateral)} {market.collateralSymbol}
+                    </span>
+                  ),
+                },
                 { icon: "event", label: "Deadline", value: formatDeadline(market.deadline) },
                 { icon: "check_circle", label: "Outcome", value: market.resolved ? (market.yesWins ? "YES ✓" : "NO ✓") : "Open" },
                 ...(depegThreshold ? [{ icon: "warning", label: "Threshold", value: `$${depegThreshold}` }] : []),
@@ -189,13 +242,13 @@ export default function MarketPage() {
               <div className="flex gap-4">
                 {userYes > 0n && (
                   <div className="flex-1 rounded-xl border border-yes-green/25 bg-yes-green/8 p-3 text-center">
-                    <div className="text-lg font-extrabold text-yes-green">{formatUsdc(userYes)}</div>
+                    <div className="text-lg font-extrabold text-yes-green">{formatStableAmount(userYes)}</div>
                     <div className="text-xs text-slate-400 font-medium">YES tokens</div>
                   </div>
                 )}
                 {userNo > 0n && (
                   <div className="flex-1 rounded-xl border border-no-red/25 bg-no-red/8 p-3 text-center">
-                    <div className="text-lg font-extrabold text-no-red">{formatUsdc(userNo)}</div>
+                    <div className="text-lg font-extrabold text-no-red">{formatStableAmount(userNo)}</div>
                     <div className="text-xs text-slate-400 font-medium">NO tokens</div>
                   </div>
                 )}
@@ -227,6 +280,8 @@ export default function MarketPage() {
 
           <LiquidityPanel
             marketAddress={marketAddress}
+            collateralAddress={market.collateralTokenAddress}
+            collateralSymbol={market.collateralSymbol}
             walletState={walletState}
             resolved={market.resolved}
             onComplete={refresh}
@@ -245,7 +300,16 @@ export default function MarketPage() {
           {market.resolved ? (
             <RedeemPanel market={market} walletState={walletState} userYesBalance={userYes} userNoBalance={userNo} onComplete={refresh} />
           ) : (
-            <TradePanel marketAddress={marketAddress} walletState={walletState} yesPrice={market.yesPrice} noPrice={market.noPrice} depegThreshold={depegThreshold} onTxComplete={refresh} />
+            <TradePanel
+              marketAddress={marketAddress}
+              collateralAddress={market.collateralTokenAddress}
+              collateralSymbol={market.collateralSymbol}
+              walletState={walletState}
+              yesPrice={market.yesPrice}
+              noPrice={market.noPrice}
+              depegThreshold={depegThreshold}
+              onTxComplete={refresh}
+            />
           )}
           <a
             href={`https://testnet.arcscan.app/address/${marketAddress}`}

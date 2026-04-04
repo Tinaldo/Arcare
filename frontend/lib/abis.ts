@@ -401,6 +401,13 @@ export const PREDICTION_MARKET_ABI = [
     outputs: [{ type: "uint256" }],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "usdc",
+    inputs: [],
+    outputs: [{ type: "address" }],
+    stateMutability: "view",
+  },
 ] as const;
 
 export const ERC20_ABI = [

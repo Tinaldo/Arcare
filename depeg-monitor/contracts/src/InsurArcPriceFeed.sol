@@ -20,13 +20,16 @@ import {IReceiver} from "./IReceiver.sol";
 contract InsurArcPriceFeed is IReceiver {
 
     // ── Constants ──────────────────────────────────────────────────────────
-    /// @notice Depeg threshold: 0.97 USD in 8-decimal fixed-point
+    /// @notice Default depeg threshold: 0.97 USD in 8-decimal fixed-point.
+    ///         Per-market overrides take precedence when set.
     uint256 public constant DEPEG_THRESHOLD = 97_000_000;
 
     // ── Events ─────────────────────────────────────────────────────────────
     event PriceUpdated(uint256 indexed marketId, uint256 price, uint256 timestamp);
-    event DepegDetected(uint256 indexed marketId, uint256 price, uint256 timestamp);
+    event DepegDetected(uint256 indexed marketId, string asset, uint256 price, uint256 threshold, uint256 timestamp);
     event ResolutionTriggered(uint256 indexed marketId, uint256 price, uint256 timestamp);
+    event MarketThresholdSet(uint256 indexed marketId, uint256 threshold);
+    event MarketAssetSet(uint256 indexed marketId, string asset);
 
     // ── State ──────────────────────────────────────────────────────────────
     struct PriceData {
@@ -36,13 +39,41 @@ contract InsurArcPriceFeed is IReceiver {
 
     mapping(uint256 => PriceData)  public prices;
     mapping(uint256 => bool)       public resolvedMarkets;
+    /// @notice Per-market depeg threshold override (8-decimal, same as DEPEG_THRESHOLD).
+    ///         0 means "use the default DEPEG_THRESHOLD".
+    mapping(uint256 => uint256)    public marketThresholds;
+    /// @notice Human-readable asset symbol tracked by each market (e.g. "USDC", "EURC").
+    mapping(uint256 => string)     public marketAsset;
 
     address public immutable forwarder;
+    address public owner;
+
+    // ── Modifiers ──────────────────────────────────────────────────────────
+    modifier onlyOwner() {
+        require(msg.sender == owner, "InsurArcPriceFeed: not owner");
+        _;
+    }
 
     // ── Constructor ────────────────────────────────────────────────────────
     constructor(address _forwarder) {
         require(_forwarder != address(0), "InsurArcPriceFeed: zero forwarder");
         forwarder = _forwarder;
+        owner = msg.sender;
+    }
+
+    // ── Admin ──────────────────────────────────────────────────────────────
+
+    /// @notice Set a per-market depeg threshold (8-decimal fixed-point).
+    ///         Pass 0 to revert to the global DEPEG_THRESHOLD default.
+    function setMarketThreshold(uint256 marketId, uint256 threshold) external onlyOwner {
+        marketThresholds[marketId] = threshold;
+        emit MarketThresholdSet(marketId, threshold);
+    }
+
+    /// @notice Set the asset symbol for a market (for off-chain indexing).
+    function setMarketAsset(uint256 marketId, string calldata asset) external onlyOwner {
+        marketAsset[marketId] = asset;
+        emit MarketAssetSet(marketId, asset);
     }
 
     // ── IReceiver ──────────────────────────────────────────────────────────
@@ -61,9 +92,14 @@ contract InsurArcPriceFeed is IReceiver {
         prices[marketId] = PriceData({ price: price, updatedAt: block.timestamp });
         emit PriceUpdated(marketId, price, block.timestamp);
 
+        // Use per-market override threshold if set, otherwise fall back to global default
+        uint256 threshold = marketThresholds[marketId] != 0
+            ? marketThresholds[marketId]
+            : DEPEG_THRESHOLD;
+
         // Depeg detection and resolution live here — not in the workflow
-        if (price < DEPEG_THRESHOLD && !resolvedMarkets[marketId]) {
-            emit DepegDetected(marketId, price, block.timestamp);
+        if (price < threshold && !resolvedMarkets[marketId]) {
+            emit DepegDetected(marketId, marketAsset[marketId], price, threshold, block.timestamp);
             _triggerResolution(marketId, price);
         }
     }

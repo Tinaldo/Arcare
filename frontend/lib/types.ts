@@ -12,6 +12,11 @@ export interface MarketOnChain {
   totalCollateral: bigint;
   yesPrice: bigint;  // 1e18 scaled
   noPrice: bigint;   // 1e18 scaled
+  collateralSymbol: string;
+  collateralTokenAddress: `0x${string}`;
+  factoryAddress: `0x${string}`;
+  resolverAddress: `0x${string}`;
+  pairKey: string;
 }
 
 export interface Wallet {

@@ -5,15 +5,16 @@ import {IERC20} from "./interfaces/IERC20.sol";
 
 /// @title PredictionMarket
 /// @notice Fixed Product Market Maker (FPMM) prediction market.
-///         Collateral: USDC. Outcome tokens tracked internally (no ERC20 per outcome).
+///         Collateral: Any IERC20 (USDC, EURC, …). Outcome tokens tracked
+///         internally (no ERC20 per outcome).
 ///
 ///         Invariant: yesReserve * noReserve = k (constant across trades, grows with liquidity).
 ///
-///         BUY formula (buying YES with c USDC):
+///         BUY formula (buying YES with c collateral):
 ///           tokensOut = (yesR + c) - k / (noR + c)
-///           yesR_new = k / (noR + c),  noR_new = noR + c
+///           yesR_new  = k / (noR + c),  noR_new = noR + c
 ///
-///         SELL formula (selling s YES for c USDC) — requires quadratic solve:
+///         SELL formula (selling s YES for c collateral) — quadratic solve:
 ///           (yesR + s - c)(noR - c) = k
 ///           c² - (yesR + s + noR)c + noR * s = 0
 ///           c = [(yesR+s+noR) - sqrt((yesR+s+noR)² - 4*noR*s)] / 2
@@ -22,7 +23,7 @@ import {IERC20} from "./interfaces/IERC20.sol";
 contract PredictionMarket {
     // ─── State ────────────────────────────────────────────────────────────────
 
-    IERC20 public immutable usdc;
+    IERC20 public immutable collateral;
     address public immutable owner;
     address public immutable factory;
 
@@ -51,13 +52,13 @@ contract PredictionMarket {
 
     // ─── Events ───────────────────────────────────────────────────────────────
 
-    event LiquidityAdded(address indexed provider, uint256 usdcIn, uint256 sharesOut);
-    event LiquidityRemoved(address indexed provider, uint256 sharesIn, uint256 usdcOut);
-    event OutcomeBought(address indexed buyer, bool isYes, uint256 usdcIn, uint256 tokensOut);
-    event OutcomeSold(address indexed seller, bool isYes, uint256 tokensIn, uint256 usdcOut);
+    event LiquidityAdded(address indexed provider, uint256 collateralIn, uint256 sharesOut);
+    event LiquidityRemoved(address indexed provider, uint256 sharesIn, uint256 collateralOut);
+    event OutcomeBought(address indexed buyer, bool isYes, uint256 collateralIn, uint256 tokensOut);
+    event OutcomeSold(address indexed seller, bool isYes, uint256 tokensIn, uint256 collateralOut);
     event MarketResolved(bool yesWins);
-    event Redeemed(address indexed winner, uint256 tokensRedeemed, uint256 usdcOut);
-    event MarketDeleted(address indexed owner, uint256 usdcRefunded);
+    event Redeemed(address indexed winner, uint256 tokensRedeemed, uint256 collateralOut);
+    event MarketDeleted(address indexed owner, uint256 collateralRefunded);
 
     // ─── Errors ───────────────────────────────────────────────────────────────
 
@@ -74,38 +75,48 @@ contract PredictionMarket {
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
-    /// @param _owner         Address that can resolve (receives initial LP shares)
-    /// @param _usdc          USDC token address on Arc Testnet
-    /// @param _question      Human-readable prediction question
-    /// @param _category      "DEPEG" or "HACK"
-    /// @param _deadline      Unix timestamp; resolution expected by this date
-    /// @param _initLiquidity Initial USDC already transferred by factory
+    /// @param _owner          Address that can resolve (receives initial LP shares)
+    /// @param _collateral     ERC20 collateral token (USDC, EURC, …)
+    /// @param _question       Human-readable prediction question
+    /// @param _category       "DEPEG" or "HACK"
+    /// @param _deadline       Unix timestamp; resolution expected by this date
+    /// @param _initLiquidity  Initial collateral already transferred by factory
     constructor(
         address _owner,
-        address _usdc,
+        address _collateral,
         string memory _question,
         string memory _category,
         uint256 _deadline,
         uint256 _initLiquidity
     ) {
-        require(_initLiquidity >= 2, "Min 2 USDC units");
-        owner = _owner;
-        factory = msg.sender;
-        usdc = IERC20(_usdc);
-        question = _question;
-        category = _category;
+        require(_initLiquidity >= 2, "Min 2 collateral units");
+        owner      = _owner;
+        factory    = msg.sender;
+        collateral = IERC20(_collateral);
+        question   = _question;
+        category   = _category;
         resolutionDeadline = _deadline;
 
         // 50/50 bootstrap → probability starts at 50%
-        uint256 half = _initLiquidity / 2;
-        yesReserve = half;
-        noReserve = _initLiquidity - half;
+        uint256 half    = _initLiquidity / 2;
+        yesReserve      = half;
+        noReserve       = _initLiquidity - half;
         totalCollateral = _initLiquidity;
 
         lpShares[_owner] = _initLiquidity;
-        totalLPShares = _initLiquidity;
+        totalLPShares    = _initLiquidity;
 
         emit LiquidityAdded(_owner, _initLiquidity, _initLiquidity);
+    }
+
+    // ─── Backward-compat alias ────────────────────────────────────────────────
+
+    /// @dev Returns the collateral token address.
+    ///      Kept so existing USDC deployments (which expose a `usdc()` getter
+    ///      from the old immutable name) and `markets.ts` `functionName:"usdc"`
+    ///      calls remain compatible without an ABI change.
+    function usdc() external view returns (address) {
+        return address(collateral);
     }
 
     // ─── Modifiers ────────────────────────────────────────────────────────────
@@ -127,106 +138,101 @@ contract PredictionMarket {
 
     // ─── Liquidity ────────────────────────────────────────────────────────────
 
-    /// @notice Add USDC liquidity, preserving the current YES/NO price ratio.
-    function addLiquidity(uint256 usdcIn) external notResolved {
-        if (usdcIn == 0) revert ZeroAmount();
-        usdc.transferFrom(msg.sender, address(this), usdcIn);
+    /// @notice Add collateral liquidity, preserving the current YES/NO price ratio.
+    function addLiquidity(uint256 collateralIn) external notResolved {
+        if (collateralIn == 0) revert ZeroAmount();
+        collateral.transferFrom(msg.sender, address(this), collateralIn);
 
-        uint256 total = yesReserve + noReserve;
-        uint256 yesAdd = (usdcIn * yesReserve) / total;
-        uint256 noAdd = usdcIn - yesAdd;
+        uint256 total  = yesReserve + noReserve;
+        uint256 yesAdd = (collateralIn * yesReserve) / total;
+        uint256 noAdd  = collateralIn - yesAdd;
 
         yesReserve += yesAdd;
-        noReserve += noAdd;
+        noReserve  += noAdd;
 
         uint256 sharesOut = totalLPShares == 0
-            ? usdcIn
-            : (usdcIn * totalLPShares) / totalCollateral;
+            ? collateralIn
+            : (collateralIn * totalLPShares) / totalCollateral;
 
         lpShares[msg.sender] += sharesOut;
-        totalLPShares += sharesOut;
-        totalCollateral += usdcIn;
+        totalLPShares        += sharesOut;
+        totalCollateral      += collateralIn;
 
-        emit LiquidityAdded(msg.sender, usdcIn, sharesOut);
+        emit LiquidityAdded(msg.sender, collateralIn, sharesOut);
     }
 
     /// @notice Remove liquidity proportional to LP share ownership.
     ///         Callable before and after resolution. After resolution, LPs receive
-    ///         their share of the remaining collateral (losing-side tokens + any
-    ///         unclaimed winning tokens). Reserve updates are skipped post-resolution
-    ///         since the AMM is no longer active.
+    ///         their share of the remaining collateral.
     function removeLiquidity(uint256 shares) external {
         if (shares == 0) revert ZeroAmount();
         if (lpShares[msg.sender] < shares) revert InsufficientBalance();
 
-        uint256 usdcOut = (shares * totalCollateral) / totalLPShares;
+        uint256 collateralOut = (shares * totalCollateral) / totalLPShares;
 
         if (!resolved) {
             yesReserve -= (shares * yesReserve) / totalLPShares;
-            noReserve -= (shares * noReserve) / totalLPShares;
+            noReserve  -= (shares * noReserve)  / totalLPShares;
         }
 
         lpShares[msg.sender] -= shares;
-        totalLPShares -= shares;
-        totalCollateral -= usdcOut;
+        totalLPShares        -= shares;
+        totalCollateral      -= collateralOut;
 
-        usdc.transfer(msg.sender, usdcOut);
+        collateral.transfer(msg.sender, collateralOut);
 
-        emit LiquidityRemoved(msg.sender, shares, usdcOut);
+        emit LiquidityRemoved(msg.sender, shares, collateralOut);
     }
 
     // ─── Trading ──────────────────────────────────────────────────────────────
 
-    /// @notice Buy YES or NO outcome tokens with USDC.
+    /// @notice Buy YES or NO outcome tokens with collateral.
     ///
-    ///   Buying YES with c USDC:
+    ///   Buying YES with c collateral:
     ///     k = yesR * noR
     ///     tokensOut = (yesR + c) - k / (noR + c)
-    ///     yesR_new  = k / (noR + c)
-    ///     noR_new   = noR + c
+    ///     yesR_new  = k / (noR + c),  noR_new = noR + c
     ///
-    /// @param isYes        true = buy YES, false = buy NO
-    /// @param usdcIn       USDC to spend (6 decimals)
-    /// @param minTokensOut Slippage protection
-    function buyOutcome(bool isYes, uint256 usdcIn, uint256 minTokensOut) external notResolved {
-        if (usdcIn == 0) revert ZeroAmount();
-        usdc.transferFrom(msg.sender, address(this), usdcIn);
+    /// @param isYes           true = buy YES, false = buy NO
+    /// @param collateralIn    Collateral to spend (6 decimals)
+    /// @param minTokensOut    Slippage protection
+    function buyOutcome(bool isYes, uint256 collateralIn, uint256 minTokensOut) external notResolved {
+        if (collateralIn == 0) revert ZeroAmount();
+        collateral.transferFrom(msg.sender, address(this), collateralIn);
 
-        uint256 tokensOut = _calcBuy(isYes, usdcIn);
+        uint256 tokensOut = _calcBuy(isYes, collateralIn);
         if (tokensOut < minTokensOut) revert SlippageExceeded();
 
         uint256 k = yesReserve * noReserve;
 
         if (isYes) {
-            uint256 newNo = noReserve + usdcIn;
+            uint256 newNo = noReserve + collateralIn;
             yesReserve = k / newNo;
-            noReserve = newNo;
+            noReserve  = newNo;
             yesBalances[msg.sender] += tokensOut;
-            yesOpenInterest += tokensOut;
+            yesOpenInterest         += tokensOut;
         } else {
-            uint256 newYes = yesReserve + usdcIn;
-            noReserve = k / newYes;
+            uint256 newYes = yesReserve + collateralIn;
+            noReserve  = k / newYes;
             yesReserve = newYes;
             noBalances[msg.sender] += tokensOut;
-            noOpenInterest += tokensOut;
+            noOpenInterest         += tokensOut;
         }
 
-        totalCollateral += usdcIn;
+        totalCollateral += collateralIn;
 
-        emit OutcomeBought(msg.sender, isYes, usdcIn, tokensOut);
+        emit OutcomeBought(msg.sender, isYes, collateralIn, tokensOut);
     }
 
-    /// @notice Sell YES or NO outcome tokens back for USDC.
+    /// @notice Sell YES or NO outcome tokens back for collateral.
     ///
-    ///   Selling s YES tokens for c USDC solves:
-    ///     (yesR + s - c)(noR - c) = k
-    ///     c² - (yesR + s + noR)c + noR*s = 0
-    ///     c = [(yesR+s+noR) - sqrt((yesR+s+noR)² - 4*noR*s)] / 2
+    ///   Selling s YES: (yesR + s - c)(noR - c) = k
+    ///   c² - (yesR + s + noR)c + noR*s = 0
     ///
-    /// @param isYes      true = sell YES, false = sell NO
-    /// @param tokensIn   Outcome tokens to sell
-    /// @param minUsdcOut Slippage protection
-    function sellOutcome(bool isYes, uint256 tokensIn, uint256 minUsdcOut) external notResolved {
+    /// @param isYes            true = sell YES, false = sell NO
+    /// @param tokensIn         Outcome tokens to sell
+    /// @param minCollateralOut Slippage protection
+    function sellOutcome(bool isYes, uint256 tokensIn, uint256 minCollateralOut) external notResolved {
         if (tokensIn == 0) revert ZeroAmount();
 
         if (isYes) {
@@ -235,28 +241,25 @@ contract PredictionMarket {
             if (noBalances[msg.sender] < tokensIn) revert InsufficientBalance();
         }
 
-        uint256 usdcOut = _calcSell(isYes, tokensIn);
-        if (usdcOut < minUsdcOut) revert SlippageExceeded();
+        uint256 collateralOut = _calcSell(isYes, tokensIn);
+        if (collateralOut < minCollateralOut) revert SlippageExceeded();
 
-        // Update reserves: undo the mint, burn the pair
         if (isYes) {
-            // yesR_new = yesR + tokensIn - usdcOut
-            // noR_new  = noR - usdcOut
-            yesReserve = yesReserve + tokensIn - usdcOut;
-            noReserve = noReserve - usdcOut;
+            yesReserve = yesReserve + tokensIn - collateralOut;
+            noReserve  = noReserve  - collateralOut;
             yesBalances[msg.sender] -= tokensIn;
-            yesOpenInterest -= tokensIn;
+            yesOpenInterest         -= tokensIn;
         } else {
-            yesReserve = yesReserve - usdcOut;
-            noReserve = noReserve + tokensIn - usdcOut;
+            yesReserve = yesReserve - collateralOut;
+            noReserve  = noReserve  + tokensIn - collateralOut;
             noBalances[msg.sender] -= tokensIn;
-            noOpenInterest -= tokensIn;
+            noOpenInterest         -= tokensIn;
         }
 
-        totalCollateral -= usdcOut;
-        usdc.transfer(msg.sender, usdcOut);
+        totalCollateral -= collateralOut;
+        collateral.transfer(msg.sender, collateralOut);
 
-        emit OutcomeSold(msg.sender, isYes, tokensIn, usdcOut);
+        emit OutcomeSold(msg.sender, isYes, tokensIn, collateralOut);
     }
 
     // ─── Resolution ───────────────────────────────────────────────────────────
@@ -265,11 +268,11 @@ contract PredictionMarket {
     ///         TODO: integrate Chainlink CRE automation trigger here.
     function resolve(bool _yesWins) external onlyOwner notResolved {
         resolved = true;
-        yesWins = _yesWins;
+        yesWins  = _yesWins;
         emit MarketResolved(_yesWins);
     }
 
-    /// @notice Redeem winning tokens 1:1 for USDC after resolution.
+    /// @notice Redeem winning tokens 1:1 for collateral after resolution.
     function redeem() external {
         if (!resolved) revert MarketNotResolved();
 
@@ -287,40 +290,41 @@ contract PredictionMarket {
         }
 
         totalCollateral -= tokens;
-        usdc.transfer(msg.sender, tokens);
+        collateral.transfer(msg.sender, tokens);
         emit Redeemed(msg.sender, tokens, tokens);
     }
 
     /// @notice Permanently freeze the market and refund all collateral to the owner.
-    ///         Only the factory can call this, and only when no trader positions or external LPs exist.
-    function deleteAndRefundOwner() external onlyFactory notResolved returns (uint256 usdcOut) {
+    ///         Only the factory can call this, and only when no trader positions
+    ///         or external LPs exist.
+    function deleteAndRefundOwner() external onlyFactory notResolved returns (uint256 collateralOut) {
         if (yesOpenInterest != 0 || noOpenInterest != 0) revert OpenInterestExists();
 
         uint256 ownerShares = lpShares[owner];
         if (ownerShares != totalLPShares) revert ExternalLiquidityExists();
 
-        usdcOut = totalCollateral;
+        collateralOut = totalCollateral;
 
-        resolved = true;
-        yesWins = false;
-        yesReserve = 0;
-        noReserve = 0;
+        resolved        = true;
+        yesWins         = false;
+        yesReserve      = 0;
+        noReserve       = 0;
         totalCollateral = 0;
-        totalLPShares = 0;
+        totalLPShares   = 0;
         lpShares[owner] = 0;
 
-        if (usdcOut > 0) {
-            usdc.transfer(owner, usdcOut);
-            emit LiquidityRemoved(owner, ownerShares, usdcOut);
+        if (collateralOut > 0) {
+            collateral.transfer(owner, collateralOut);
+            emit LiquidityRemoved(owner, ownerShares, collateralOut);
         }
 
-        emit MarketDeleted(owner, usdcOut);
+        emit MarketDeleted(owner, collateralOut);
     }
 
     // ─── View functions ───────────────────────────────────────────────────────
 
-    function calcBuy(bool isYes, uint256 usdcIn) external view returns (uint256) {
-        return _calcBuy(isYes, usdcIn);
+    function calcBuy(bool isYes, uint256 collateralIn) external view returns (uint256) {
+        return _calcBuy(isYes, collateralIn);
     }
 
     function calcSell(bool isYes, uint256 tokensIn) external view returns (uint256) {
@@ -356,10 +360,10 @@ contract PredictionMarket {
     {
         if (resolved) {
             _yesPrice = yesWins ? 1e18 : 0;
-            _noPrice  = yesWins ? 0 : 1e18;
+            _noPrice  = yesWins ? 0    : 1e18;
         } else {
             uint256 total = yesReserve + noReserve;
-            _yesPrice = total == 0 ? 0.5e18 : (noReserve * 1e18) / total;
+            _yesPrice = total == 0 ? 0.5e18 : (noReserve  * 1e18) / total;
             _noPrice  = total == 0 ? 0.5e18 : (yesReserve * 1e18) / total;
         }
         return (
@@ -382,36 +386,22 @@ contract PredictionMarket {
 
     // ─── Internal math ────────────────────────────────────────────────────────
 
-    /// Buy formula (same for both outcomes, just swap which reserve is "same" vs "other"):
-    ///   buyYES: sameR=yesR, otherR=noR  → tokensOut = (yesR+c) - k/(noR+c)
-    ///   buyNO:  sameR=noR,  otherR=yesR → tokensOut = (noR+c)  - k/(yesR+c)
-    function _calcBuy(bool isYes, uint256 usdcIn) internal view returns (uint256) {
+    function _calcBuy(bool isYes, uint256 collateralIn) internal view returns (uint256) {
         uint256 k = yesReserve * noReserve;
         if (isYes) {
-            return (yesReserve + usdcIn) - k / (noReserve + usdcIn);
+            return (yesReserve + collateralIn) - k / (noReserve + collateralIn);
         } else {
-            return (noReserve + usdcIn) - k / (yesReserve + usdcIn);
+            return (noReserve + collateralIn) - k / (yesReserve + collateralIn);
         }
     }
 
-    /// Sell formula — quadratic solve:
-    ///   Selling s YES: (yesR + s - c)(noR - c) = k
-    ///   c² - (yesR + s + noR)c + noR*s = 0
-    ///   c = [(yesR+s+noR) - sqrt((yesR+s+noR)² - 4*noR*s)] / 2
-    ///
-    ///   Selling s NO:  (yesR - c)(noR + s - c) = k
-    ///   Same form with yes/no swapped.
     function _calcSell(bool isYes, uint256 tokensIn) internal view returns (uint256) {
         uint256 sameR  = isYes ? yesReserve : noReserve;
         uint256 otherR = isYes ? noReserve  : yesReserve;
 
-        // Quadratic: c² - (sameR + tokensIn + otherR)c + otherR * tokensIn = 0
-        uint256 b = sameR + tokensIn + otherR;
+        uint256 b      = sameR + tokensIn + otherR;
         uint256 fourAC = 4 * otherR * tokensIn;
-
-        uint256 discriminant = b * b - fourAC;
-        uint256 sqrtD = _sqrt(discriminant);
-
+        uint256 sqrtD  = _sqrt(b * b - fourAC);
         return (b - sqrtD) / 2;
     }
 

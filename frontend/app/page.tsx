@@ -3,64 +3,18 @@
 import { useEffect, useState } from "react";
 import { MarketGrid } from "@/components/markets/MarketGrid";
 import { Spinner } from "@/components/ui/Spinner";
-import { arcClient } from "@/lib/arc-client";
-import { MARKET_FACTORY_ABI, PREDICTION_MARKET_ABI } from "@/lib/abis";
-import { MARKET_FACTORY_ADDRESS } from "@/lib/addresses";
+import { getMarketCollaterals } from "@/lib/collaterals";
+import { loadAllMarkets } from "@/lib/markets";
 import type { MarketOnChain } from "@/lib/types";
-
-async function fetchMarkets(): Promise<MarketOnChain[]> {
-  if (MARKET_FACTORY_ADDRESS === "0x0") return [];
-
-  const count = await arcClient.readContract({
-    address: MARKET_FACTORY_ADDRESS,
-    abi: MARKET_FACTORY_ABI,
-    functionName: "getMarketCount",
-  });
-
-  if (count === 0n) return [];
-
-  const addresses = (await arcClient.readContract({
-    address: MARKET_FACTORY_ADDRESS,
-    abi: MARKET_FACTORY_ABI,
-    functionName: "getMarkets",
-    args: [0n, count],
-  })) as `0x${string}`[];
-
-  const markets = await Promise.all(
-    addresses.map(async (addr) => {
-      const info = await arcClient.readContract({
-        address: addr,
-        abi: PREDICTION_MARKET_ABI,
-        functionName: "getMarketInfo",
-      });
-      const [question, category, deadline, resolved, yesWins, yesReserve, noReserve, totalCollateral, yesPrice, noPrice] =
-        info as [string, string, bigint, boolean, boolean, bigint, bigint, bigint, bigint, bigint];
-      return {
-        address: addr,
-        question,
-        category,
-        deadline,
-        resolved,
-        yesWins,
-        yesReserve,
-        noReserve,
-        totalCollateral,
-        yesPrice,
-        noPrice,
-      } satisfies MarketOnChain;
-    })
-  );
-
-  return markets;
-}
 
 export default function HomePage() {
   const [markets, setMarkets] = useState<MarketOnChain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasConfiguredMarkets = getMarketCollaterals().length > 0;
 
   useEffect(() => {
-    fetchMarkets()
+    loadAllMarkets()
       .then(setMarkets)
       .catch((e) => setError(e.message ?? "Failed to load markets"))
       .finally(() => setLoading(false));
@@ -120,8 +74,8 @@ export default function HomePage() {
         </div>
       ) : error ? (
         <div className="glass-card p-8 text-center text-red-500">
-          {MARKET_FACTORY_ADDRESS === "0x0"
-            ? "Deploy contracts first: set NEXT_PUBLIC_MARKET_FACTORY_ADDRESS in .env.local"
+          {!hasConfiguredMarkets
+            ? "Deploy contracts first: set the USDC and EURC market factory addresses in frontend/.env.local"
             : error}
         </div>
       ) : (

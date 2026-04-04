@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Spinner } from "@/components/ui/Spinner";
 import { PREDICTION_MARKET_ABI } from "@/lib/abis";
-import { formatUsdc } from "@/lib/arc-client";
+import { formatStableAmount } from "@/lib/arc-client";
 import { useContract } from "@/lib/use-contract";
 import type { WalletState } from "@/components/wallet/useWallet";
 import type { MarketOnChain } from "@/lib/types";
@@ -62,7 +62,7 @@ export function RedeemPanel({ market, walletState, userYesBalance, userNoBalance
       <p className="mb-4 text-sm text-slate-600">
         Market resolved:{" "}
         <span className="font-bold text-slate-900">{market.yesWins ? "YES" : "NO"}</span>.
-        Redeem {formatUsdc(winningBalance)} USDC.
+        Redeem {formatStableAmount(winningBalance)} {market.collateralSymbol}.
       </p>
       <button
         onClick={handleRedeem}

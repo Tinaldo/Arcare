@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Spinner } from "@/components/ui/Spinner";
-import { arcClient, parseUsdc, formatUsdc } from "@/lib/arc-client";
+import { arcClient, formatStableAmount, parseStableAmount } from "@/lib/arc-client";
 import { PREDICTION_MARKET_ABI } from "@/lib/abis";
-import { ARC_USDC_ADDRESS } from "@/lib/addresses";
 import { useContract, ERC20_ABI } from "@/lib/use-contract";
 import type { WalletState } from "@/components/wallet/useWallet";
 
 interface Props {
   marketAddress: string;
+  collateralAddress: `0x${string}`;
+  collateralSymbol: string;
   walletState: WalletState;
   yesPrice: bigint;
   noPrice: bigint;
@@ -22,10 +23,23 @@ type Outcome = "YES" | "NO";
 
 const SLIPPAGE = 0.005;
 
-export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depegThreshold, onTxComplete }: Props) {
+function applySlippage(amount: bigint) {
+  return (amount * 995n) / 1000n;
+}
+
+export function TradePanel({
+  marketAddress,
+  collateralAddress,
+  collateralSymbol,
+  walletState,
+  yesPrice,
+  noPrice,
+  depegThreshold,
+  onTxComplete,
+}: Props) {
   const { isConnected, connect } = walletState;
   const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI);
-  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
+  const collateral = useContract(collateralAddress, ERC20_ABI);
 
   const [action, setAction] = useState<Action>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("YES");
@@ -44,7 +58,7 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
       try {
         const addr = marketAddress as `0x${string}`;
         const isYes = outcome === "YES";
-        const amtBig = parseUsdc(amount);
+        const amtBig = parseStableAmount(amount);
         if (action === "BUY") {
           const out = await arcClient.readContract({
             address: addr,
@@ -73,20 +87,20 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
   const handleTrade = async () => {
     if (!isConnected) { connect(); return; }
     setError(null);
-    const amtBig = parseUsdc(amount);
+    const amtBig = parseStableAmount(amount);
     if (amtBig === 0n) { setError("Enter an amount"); return; }
     const isYes = outcome === "YES";
 
     try {
       if (action === "BUY") {
-        setTxStep("Step 1 of 2: Approve USDC…");
-        await usdc.write("approve", [marketAddress, amtBig]);
+        setTxStep(`Step 1 of 2: Approve ${collateralSymbol}…`);
+        await collateral.write("approve", [marketAddress, amtBig]);
         setTxStep("Step 2 of 2: Confirm trade…");
-        const minOut = BigInt(Math.floor(Number(amtBig) * (1 - SLIPPAGE)));
+        const minOut = tokensOut ? applySlippage(tokensOut) : 0n;
         await market.write("buyOutcome", [isYes, amtBig, minOut]);
       } else {
         setTxStep("Confirm sell…");
-        const minOut = BigInt(Math.floor(Number(amtBig) * (1 - SLIPPAGE)));
+        const minOut = usdcOut ? applySlippage(usdcOut) : 0n;
         await market.write("sellOutcome", [isYes, amtBig, minOut]);
       }
       setAmount("");
@@ -108,9 +122,9 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
   const showCoverage = action === "BUY" && tokensOut !== null && tokensOut > 0n;
 
   // Efficiency: tokens received per USDC spent (e.g. 2.5x)
-  const spentUsdc = amount ? parseFloat(amount) : 0;
+  const spentCollateral = amount ? parseFloat(amount) : 0;
   const receivedTokens = tokensOut ? Number(tokensOut) / 1e6 : 0;
-  const efficiency = spentUsdc > 0 ? receivedTokens / spentUsdc : 0;
+  const efficiency = spentCollateral > 0 ? receivedTokens / spentCollateral : 0;
 
   // Risk color
   const riskColor = probabilityPct >= 60 ? "#FF4D6A" : probabilityPct >= 35 ? "#F59E0B" : "#00C96E";
@@ -157,7 +171,7 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
       {/* Amount input */}
       <div className="mb-3">
         <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
-          {action === "BUY" ? "USDC to spend" : `${outcome} tokens to sell`}
+          {action === "BUY" ? `${collateralSymbol} to spend` : `${outcome} tokens to sell`}
         </label>
         <div className="flex items-center gap-2 rounded-xl border border-[rgba(116,91,255,0.2)] bg-white/80 px-4 py-3">
           <input
@@ -168,14 +182,14 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
             onChange={(e) => setAmount(e.target.value)}
             className="flex-1 bg-transparent text-lg font-bold text-slate-800 outline-none placeholder:text-slate-300 placeholder:font-normal"
           />
-          <span className="text-sm font-semibold text-slate-400">{action === "BUY" ? "USDC" : outcome}</span>
+          <span className="text-sm font-semibold text-slate-400">{action === "BUY" ? collateralSymbol : outcome}</span>
         </div>
       </div>
 
       {/* Sell preview */}
       {usdcOut !== null && action === "SELL" && (
         <div className="mb-3 rounded-xl bg-[#745BFF]/8 border border-[rgba(116,91,255,0.15)] px-4 py-2.5 text-center text-sm font-semibold text-[#745BFF]">
-          ≈ {formatUsdc(usdcOut)} USDC back
+          ≈ {formatStableAmount(usdcOut)} {collateralSymbol} back
         </div>
       )}
 
@@ -198,7 +212,7 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
             </div>
             <div className="text-right">
               <span className="text-xl font-extrabold text-[#745BFF]">
-                {formatUsdc(tokensOut!)} USDC
+                {formatStableAmount(tokensOut!)} {collateralSymbol}
               </span>
             </div>
           </div>
@@ -207,7 +221,7 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
           {efficiency > 0 && (
             <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
               <span>You spend</span>
-              <span className="font-bold text-slate-700">{parseFloat(amount).toFixed(2)} USDC</span>
+              <span className="font-bold text-slate-700">{parseFloat(amount).toFixed(2)} {collateralSymbol}</span>
             </div>
           )}
           {efficiency > 0 && (
@@ -249,11 +263,11 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depe
             <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
               {outcome === "YES"
                 ? probabilityPct < 35
-                  ? `Low-probability event. Cheap coverage — pay ${parseFloat(amount).toFixed(2)} USDC, receive ${formatUsdc(tokensOut!)} USDC if it occurs.${depegThreshold ? ` Triggers if price drops below $${depegThreshold}.` : ""}`
+                  ? `Low-probability event. Cheap coverage — pay ${parseFloat(amount).toFixed(2)} ${collateralSymbol}, receive ${formatStableAmount(tokensOut!)} ${collateralSymbol} if it occurs.${depegThreshold ? ` Triggers if price drops below $${depegThreshold}.` : ""}`
                   : probabilityPct < 60
-                  ? `Moderate risk. You pay ${parseFloat(amount).toFixed(2)} USDC for ${formatUsdc(tokensOut!)} USDC coverage.${depegThreshold ? ` Settles YES if price falls below $${depegThreshold}.` : ""}`
-                  : `High-probability event. Strong coverage — you receive ${formatUsdc(tokensOut!)} USDC if it occurs.${depegThreshold ? ` Threshold: $${depegThreshold}.` : ""}`
-                : `You earn ${formatUsdc(tokensOut!)} USDC (+${((efficiency - 1) * 100).toFixed(1)}% yield) if the event does NOT occur. Market currently prices it at ${probabilityPct}%.${depegThreshold ? ` Settles NO if price stays above $${depegThreshold}.` : ""}`
+                  ? `Moderate risk. You pay ${parseFloat(amount).toFixed(2)} ${collateralSymbol} for ${formatStableAmount(tokensOut!)} ${collateralSymbol} coverage.${depegThreshold ? ` Settles YES if price falls below $${depegThreshold}.` : ""}`
+                  : `High-probability event. Strong coverage — you receive ${formatStableAmount(tokensOut!)} ${collateralSymbol} if it occurs.${depegThreshold ? ` Threshold: $${depegThreshold}.` : ""}`
+                : `You earn ${formatStableAmount(tokensOut!)} ${collateralSymbol} (+${((efficiency - 1) * 100).toFixed(1)}% yield) if the event does NOT occur. Market currently prices it at ${probabilityPct}%.${depegThreshold ? ` Settles NO if price stays above $${depegThreshold}.` : ""}`
               }
             </p>
           </div>

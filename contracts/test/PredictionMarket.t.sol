@@ -481,3 +481,85 @@ contract PredictionMarketTest is Test {
         assertApproxEqRel(k1, k0, 1e12, "k invariant holds under fuzz");
     }
 }
+
+// ─── EURC multi-collateral tests ──────────────────────────────────────────────
+
+contract EURCMarketTest is Test {
+    MockUSDC eurc; // generic ERC20 mock reused for EURC
+    MarketFactory factory;
+    PredictionMarket market;
+    PriceRouter router;
+
+    address alice = address(0xA11CE);
+    uint256 constant INIT_LIQ = 1_000e6;
+    uint256 constant DEADLINE = 2_000_000_000;
+
+    function setUp() public {
+        eurc    = new MockUSDC();
+        router  = new PriceRouter(address(this));
+        factory = new MarketFactory(address(eurc), address(router));
+        router.grantMarketRegistrar(address(factory));
+
+        eurc.mint(address(this), 10_000e6);
+        eurc.approve(address(factory), type(uint256).max);
+
+        address mAddr = factory.createMarket(
+            "Will EURC depeg below $0.97 before Dec 31, 2025?",
+            "DEPEG",
+            DEADLINE,
+            INIT_LIQ,
+            address(0)
+        );
+        market = PredictionMarket(mAddr);
+
+        eurc.mint(alice, 1_000e6);
+        vm.prank(alice);
+        eurc.approve(address(market), type(uint256).max);
+    }
+
+    function test_eurc_collateralAddress() public view {
+        assertEq(address(market.collateral()), address(eurc));
+        assertEq(market.usdc(), address(eurc)); // backward-compat alias
+    }
+
+    function test_eurc_factoryCollateral() public view {
+        assertEq(address(factory.collateral()), address(eurc));
+    }
+
+    function test_eurc_buyAndSell() public {
+        uint256 buyAmt = 100e6;
+
+        vm.prank(alice);
+        market.buyOutcome(true, buyAmt, 0);
+
+        uint256 yesBal = market.yesBalances(alice);
+        assertGt(yesBal, 0, "alice should hold YES tokens");
+
+        // sell half back
+        vm.prank(alice);
+        market.sellOutcome(true, yesBal / 2, 0);
+
+        assertEq(market.yesBalances(alice), yesBal - yesBal / 2, "half sold");
+        assertGt(eurc.balanceOf(alice), 1_000e6 - buyAmt, "some EURC returned");
+    }
+
+    function test_eurc_resolveAndRedeem() public {
+        uint256 buyAmt = 100e6;
+
+        vm.prank(alice);
+        market.buyOutcome(true, buyAmt, 0);
+        uint256 yesBal = market.yesBalances(alice);
+
+        // Resolve YES (owner = factory deployer = address(this))
+        market.resolve(true);
+        assertTrue(market.resolved());
+        assertTrue(market.yesWins());
+
+        uint256 balBefore = eurc.balanceOf(alice);
+        vm.prank(alice);
+        market.redeem();
+
+        assertEq(eurc.balanceOf(alice), balBefore + yesBal, "redeemed 1:1 in EURC");
+        assertEq(market.yesBalances(alice), 0, "YES balance cleared");
+    }
+}

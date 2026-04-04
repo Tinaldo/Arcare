@@ -7,3 +7,12 @@ export const DEPEG_RESOLVER_ADDRESS =
 export const ARC_USDC_ADDRESS =
   (process.env.NEXT_PUBLIC_ARC_USDC_ADDRESS as `0x${string}`) ??
   "0x3600000000000000000000000000000000000000";
+
+export const EURC_MARKET_FACTORY_ADDRESS =
+  (process.env.NEXT_PUBLIC_EURC_MARKET_FACTORY_ADDRESS || "0x0") as `0x${string}`;
+
+export const EURC_DEPEG_RESOLVER_ADDRESS =
+  (process.env.NEXT_PUBLIC_EURC_DEPEG_RESOLVER_ADDRESS || "0x0") as `0x${string}`;
+
+export const ARC_EURC_ADDRESS =
+  (process.env.NEXT_PUBLIC_ARC_EURC_ADDRESS || "0x0") as `0x${string}`;

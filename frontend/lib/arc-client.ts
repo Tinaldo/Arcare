@@ -33,12 +33,12 @@ export function formatPrice(price1e18: bigint): string {
 }
 
 // Utility: format USDC (6 decimals) to human-readable string
-export function formatUsdc(amount: bigint, decimals = 2): string {
+export function formatStableAmount(amount: bigint, decimals = 2): string {
   return formatTokenAmount(amount, 6, decimals);
 }
 
-// Utility: parse human-readable USDC string to bigint (6 decimals)
-export function parseUsdc(amount: string): bigint {
+// Utility: parse human-readable stablecoin string to bigint (6 decimals)
+export function parseStableAmount(amount: string): bigint {
   const value = amount.trim();
   if (!value) return 0n;
 
@@ -47,6 +47,14 @@ export function parseUsdc(amount: string): bigint {
   } catch {
     return 0n;
   }
+}
+
+export function formatUsdc(amount: bigint, decimals = 2): string {
+  return formatStableAmount(amount, decimals);
+}
+
+export function parseUsdc(amount: string): bigint {
+  return parseStableAmount(amount);
 }
 
 /**

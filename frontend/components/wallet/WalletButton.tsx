@@ -1,5 +1,6 @@
 'use client'
 
+import { TokenLogo } from '@/components/tokens/TokenLogo'
 import { useWallet } from './WalletContext'
 
 function truncate(addr: string) {
@@ -7,7 +8,7 @@ function truncate(addr: string) {
 }
 
 export function WalletButton() {
-  const { address, isConnected, isOnArc, balance, connect, disconnect } = useWallet()
+  const { address, isConnected, isOnArc, balances, connect, disconnect } = useWallet()
 
   if (isConnected && address) {
     return (
@@ -18,10 +19,18 @@ export function WalletButton() {
             Switch to Arc Testnet
           </span>
         )}
-        {balance !== undefined && (
-          <span className="hidden text-sm font-semibold text-slate-700 sm:block">
-            {balance} USDC
-          </span>
+        {balances.length > 0 && (
+          <div className="hidden flex-col items-end gap-1 sm:flex">
+            {balances.map((balance) => (
+              <span
+                key={balance.symbol}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700"
+              >
+                <TokenLogo symbol={balance.symbol} size={18} />
+                {balance.amount}
+              </span>
+            ))}
+          </div>
         )}
         <div className="flex items-center gap-2 rounded-full border border-[rgba(116,91,255,0.2)] bg-white/70 px-4 py-2 shadow-sm">
           <span className="h-2 w-2 rounded-full bg-yes-green" />
