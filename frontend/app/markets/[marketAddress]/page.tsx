@@ -156,7 +156,7 @@ export default function MarketPage() {
           {market.resolved ? (
             <RedeemPanel market={market} walletState={walletState} userYesBalance={userYes} userNoBalance={userNo} onComplete={refresh} />
           ) : (
-            <TradePanel marketAddress={marketAddress} walletState={walletState} onTxComplete={refresh} />
+            <TradePanel marketAddress={marketAddress} walletState={walletState} yesPrice={market.yesPrice} noPrice={market.noPrice} onTxComplete={refresh} />
           )}
           <a
             href={`https://testnet.arcscan.app/address/${marketAddress}`}

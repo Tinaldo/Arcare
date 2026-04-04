@@ -11,15 +11,17 @@ import type { WalletState } from "@/components/wallet/useWallet";
 interface Props {
   marketAddress: string;
   walletState: WalletState;
+  yesPrice: bigint;
+  noPrice: bigint;
   onTxComplete?: () => void;
 }
 
 type Action = "BUY" | "SELL";
 type Outcome = "YES" | "NO";
 
-const SLIPPAGE = 0.005; // 0.5%
+const SLIPPAGE = 0.005;
 
-export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) {
+export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTxComplete }: Props) {
   const { isConnected, connect } = walletState;
   const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI);
   const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
@@ -27,12 +29,15 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
   const [action, setAction] = useState<Action>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("YES");
   const [amount, setAmount] = useState("");
-  const [preview, setPreview] = useState<string | null>(null);
+  const [tokensOut, setTokensOut] = useState<bigint | null>(null);   // raw buy preview
+  const [usdcOut, setUsdcOut] = useState<bigint | null>(null);       // raw sell preview
   const [txStep, setTxStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset previews when inputs change
   useEffect(() => {
-    setPreview(null);
+    setTokensOut(null);
+    setUsdcOut(null);
     if (!amount || parseFloat(amount) <= 0) return;
     const timeout = setTimeout(async () => {
       try {
@@ -46,18 +51,19 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
             functionName: "calcBuy",
             args: [isYes, amtBig],
           });
-          setPreview(`≈ ${formatUsdc(out as bigint)} ${outcome} tokens`);
+          setTokensOut(out as bigint);
         } else {
           const out = await arcClient.readContract({
             address: addr,
             abi: PREDICTION_MARKET_ABI,
             functionName: "calcSell",
-            args: [isYes, parseUsdc(amount)],
+            args: [isYes, amtBig],
           });
-          setPreview(`≈ ${formatUsdc(out as bigint)} USDC`);
+          setUsdcOut(out as bigint);
         }
       } catch {
-        setPreview(null);
+        setTokensOut(null);
+        setUsdcOut(null);
       }
     }, 400);
     return () => clearTimeout(timeout);
@@ -83,6 +89,8 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
         await market.write("sellOutcome", [isYes, amtBig, minOut]);
       }
       setAmount("");
+      setTokensOut(null);
+      setUsdcOut(null);
       setTxStep(null);
       onTxComplete?.();
     } catch (e: unknown) {
@@ -90,6 +98,22 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
       setTxStep(null);
     }
   };
+
+  // Derived display values
+  const currentPrice = outcome === "YES" ? yesPrice : noPrice;
+  const probabilityPct = Math.round((Number(currentPrice) / 1e18) * 100);
+
+  // Coverage card: only shown for BUY when we have a token preview
+  const showCoverage = action === "BUY" && tokensOut !== null && tokensOut > 0n;
+
+  // Efficiency: tokens received per USDC spent (e.g. 2.5x)
+  const spentUsdc = amount ? parseFloat(amount) : 0;
+  const receivedTokens = tokensOut ? Number(tokensOut) / 1e6 : 0;
+  const efficiency = spentUsdc > 0 ? receivedTokens / spentUsdc : 0;
+
+  // Risk color
+  const riskColor = probabilityPct >= 60 ? "#FF4D6A" : probabilityPct >= 35 ? "#F59E0B" : "#00C96E";
+  const riskLabel = probabilityPct >= 60 ? "High risk" : probabilityPct >= 35 ? "Moderate risk" : "Low risk";
 
   return (
     <div className="glass-card p-5">
@@ -147,9 +171,80 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
         </div>
       </div>
 
-      {preview && (
+      {/* Sell preview */}
+      {usdcOut !== null && action === "SELL" && (
         <div className="mb-3 rounded-xl bg-[#745BFF]/8 border border-[rgba(116,91,255,0.15)] px-4 py-2.5 text-center text-sm font-semibold text-[#745BFF]">
-          {preview}
+          ≈ {formatUsdc(usdcOut)} USDC back
+        </div>
+      )}
+
+      {/* Coverage card — shown on BUY with preview */}
+      {showCoverage && (
+        <div className={`mb-3 rounded-xl border p-4 ${
+          outcome === "YES"
+            ? "border-[rgba(116,91,255,0.2)] bg-[rgba(116,91,255,0.05)]"
+            : "border-no-red/20 bg-no-red/5"
+        }`}>
+          {/* Payout row */}
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-[#745BFF]">
+                {outcome === "YES" ? "verified_user" : "trending_down"}
+              </span>
+              <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                If {outcome} resolves
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-xl font-extrabold text-[#745BFF]">
+                {formatUsdc(tokensOut!)} USDC
+              </span>
+            </div>
+          </div>
+
+          {/* Efficiency */}
+          {efficiency > 0 && (
+            <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
+              <span>You spend</span>
+              <span className="font-bold text-slate-700">{parseFloat(amount).toFixed(2)} USDC</span>
+            </div>
+          )}
+          {efficiency > 0 && (
+            <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
+              <span>Coverage ratio</span>
+              <span className="font-bold" style={{ color: "#745BFF" }}>
+                {efficiency.toFixed(2)}× return
+              </span>
+            </div>
+          )}
+
+          {/* Risk / probability bar */}
+          <div className="rounded-lg bg-white/60 px-3 py-2.5">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                Market probability
+              </span>
+              <span className="text-xs font-bold" style={{ color: riskColor }}>
+                {probabilityPct}% — {riskLabel}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{ width: `${probabilityPct}%`, background: riskColor }}
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+              {outcome === "YES"
+                ? probabilityPct < 35
+                  ? `Low probability event. Cheap coverage — pay ${parseFloat(amount).toFixed(2)} USDC, receive ${formatUsdc(tokensOut!)} USDC if it occurs.`
+                  : probabilityPct < 60
+                  ? `Moderate risk. You pay ${parseFloat(amount).toFixed(2)} USDC for ${formatUsdc(tokensOut!)} USDC coverage.`
+                  : `High-probability event. Strong coverage — you receive ${formatUsdc(tokensOut!)} USDC if it occurs.`
+                : `Betting against the event. You receive ${formatUsdc(tokensOut!)} USDC if it does NOT occur.`
+              }
+            </p>
+          </div>
         </div>
       )}
 
