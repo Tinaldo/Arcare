@@ -1,0 +1,24 @@
+kind: starter-template
+id: depeg-monitor-ts
+projectDir: .
+title: "Depeg Monitor (TypeScript)"
+description: "Cron-triggered stablecoin depeg monitor — fetch prices hourly, detect pegs below 0.97, trigger on-chain resolution on Arc testnet."
+language: typescript
+category: workflow
+capabilities:
+  - cron
+  - http
+  - chain-write
+tags:
+  - stablecoin
+  - depeg
+  - insurance
+  - defi
+  - arc
+networks:
+  - ethereum-testnet-sepolia
+workflows:
+  - dir: my-workflow
+postInit: |
+  Deploy InsurArcResolution.sol on Arc testnet and set contractAddress in config.staging.json.
+  See README.md for full setup instructions.
