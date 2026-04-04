@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ProbabilityBar } from "./ProbabilityBar";
-import { formatUsdc } from "@/lib/arc-client";
+import { formatUsdc, parseDepegThreshold } from "@/lib/arc-client";
 import type { MarketOnChain } from "@/lib/types";
 
 interface Props {
@@ -27,6 +27,7 @@ export function MarketCard({ market }: Props) {
   const yesPct = Math.round((Number(market.yesPrice) / 1e18) * 100);
   const risk = riskScore(market.yesPrice);
   const isHack = market.category === "HACK";
+  const depegThreshold = market.category === "DEPEG" ? parseDepegThreshold(market.question) : null;
 
   return (
     <Link href={`/markets/${market.address}`} className="block">
@@ -85,8 +86,16 @@ export function MarketCard({ market }: Props) {
         {/* Probability bar */}
         <ProbabilityBar yesPrice={market.yesPrice} noPrice={market.noPrice} />
 
+        {/* Depeg threshold badge */}
+        {depegThreshold && (
+          <div className="mt-3 inline-flex items-center gap-1 rounded-full border border-[#745BFF]/20 bg-[#745BFF]/6 px-2.5 py-0.5">
+            <span className="material-symbols-outlined text-[11px] text-[#745BFF]">warning</span>
+            <span className="text-[10px] font-bold text-[#745BFF]">Threshold: ${depegThreshold}</span>
+          </div>
+        )}
+
         {/* Footer */}
-        <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-[14px]">water_drop</span>
             {formatUsdc(market.totalCollateral)} USDC

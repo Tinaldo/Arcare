@@ -49,6 +49,16 @@ export function parseUsdc(amount: string): bigint {
   }
 }
 
+/**
+ * Extracts the depeg threshold from a market question string.
+ * Looks for the pattern "below $X.XX" (case-insensitive).
+ * Returns the threshold as a string (e.g. "0.97"), or null if not found.
+ */
+export function parseDepegThreshold(question: string): string | null {
+  const match = question.match(/below \$([0-9]+(?:\.[0-9]+)?)/i);
+  return match ? match[1] : null;
+}
+
 export function formatTokenAmount(amount: bigint, tokenDecimals: number, displayDecimals = 2): string {
   const normalizedDisplayDecimals = Math.max(0, displayDecimals);
   const displayScale = 10n ** BigInt(normalizedDisplayDecimals);

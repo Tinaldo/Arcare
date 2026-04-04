@@ -13,6 +13,7 @@ interface Props {
   walletState: WalletState;
   yesPrice: bigint;
   noPrice: bigint;
+  depegThreshold?: string | null;
   onTxComplete?: () => void;
 }
 
@@ -21,7 +22,7 @@ type Outcome = "YES" | "NO";
 
 const SLIPPAGE = 0.005;
 
-export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTxComplete }: Props) {
+export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, depegThreshold, onTxComplete }: Props) {
   const { isConnected, connect } = walletState;
   const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI);
   const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
@@ -248,11 +249,11 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTx
             <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
               {outcome === "YES"
                 ? probabilityPct < 35
-                  ? `Low-probability event. Cheap coverage — pay ${parseFloat(amount).toFixed(2)} USDC, receive ${formatUsdc(tokensOut!)} USDC if it occurs.`
+                  ? `Low-probability event. Cheap coverage — pay ${parseFloat(amount).toFixed(2)} USDC, receive ${formatUsdc(tokensOut!)} USDC if it occurs.${depegThreshold ? ` Triggers if price drops below $${depegThreshold}.` : ""}`
                   : probabilityPct < 60
-                  ? `Moderate risk. You pay ${parseFloat(amount).toFixed(2)} USDC for ${formatUsdc(tokensOut!)} USDC coverage.`
-                  : `High-probability event. Strong coverage — you receive ${formatUsdc(tokensOut!)} USDC if it occurs.`
-                : `You earn ${formatUsdc(tokensOut!)} USDC (+${((efficiency - 1) * 100).toFixed(1)}% yield) if the event does NOT occur. Market currently prices it at ${probabilityPct}%.`
+                  ? `Moderate risk. You pay ${parseFloat(amount).toFixed(2)} USDC for ${formatUsdc(tokensOut!)} USDC coverage.${depegThreshold ? ` Settles YES if price falls below $${depegThreshold}.` : ""}`
+                  : `High-probability event. Strong coverage — you receive ${formatUsdc(tokensOut!)} USDC if it occurs.${depegThreshold ? ` Threshold: $${depegThreshold}.` : ""}`
+                : `You earn ${formatUsdc(tokensOut!)} USDC (+${((efficiency - 1) * 100).toFixed(1)}% yield) if the event does NOT occur. Market currently prices it at ${probabilityPct}%.${depegThreshold ? ` Settles NO if price stays above $${depegThreshold}.` : ""}`
               }
             </p>
           </div>

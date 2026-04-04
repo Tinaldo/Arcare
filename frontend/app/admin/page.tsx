@@ -47,6 +47,8 @@ export default function AdminPage() {
 
   const [question, setQuestion] = useState("");
   const [category, setCategory] = useState<"DEPEG" | "HACK">("DEPEG");
+  const [depegAsset, setDepegAsset] = useState("");
+  const [depegThreshold, setDepegThreshold] = useState("");
   const [deadline, setDeadline] = useState("");
   const [liquidity, setLiquidity] = useState("10");
   const [priceFeed, setPriceFeed] = useState(PRICE_FEEDS[0].address);
@@ -66,6 +68,18 @@ export default function AdminPage() {
   const [roleStep, setRoleStep] = useState<string | null>(null);
   const [roleError, setRoleError] = useState("");
   const [roleDone, setRoleDone] = useState("");
+
+  // Auto-generate question for DEPEG markets
+  useEffect(() => {
+    if (category !== "DEPEG") return;
+    if (!depegAsset && !depegThreshold) return;
+    const asset = depegAsset.trim() || "TOKEN";
+    const threshold = depegThreshold.trim() || "0.99";
+    const dateStr = deadline
+      ? new Date(deadline).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+      : "<resolution date>";
+    setQuestion(`Will ${asset} depeg below $${threshold} before ${dateStr}?`);
+  }, [category, depegAsset, depegThreshold, deadline]);
 
   const loadRoles = useCallback(async () => {
     if (!address || MARKET_FACTORY_ADDRESS === "0x0") return;
@@ -179,6 +193,13 @@ export default function AdminPage() {
       setCreateError("Deadline must be in the future");
       return;
     }
+    if (category === "DEPEG") {
+      const t = Number(depegThreshold);
+      if (!depegThreshold || isNaN(t) || t <= 0 || t >= 1) {
+        setCreateError("Depeg threshold must be between $0.01 and $0.99");
+        return;
+      }
+    }
     const liqUsdc = parseUsdc(liquidity);
     if (liqUsdc === 0n) { setCreateError("Enter initial liquidity"); return; }
     const normalizedPriceFeed = priceFeed.trim() === "" ? "0x0000000000000000000000000000000000000000" : priceFeed.trim();
@@ -194,6 +215,8 @@ export default function AdminPage() {
       setCreateDone(true);
       setCreateStep(null);
       setQuestion("");
+      setDepegAsset("");
+      setDepegThreshold("");
       setDeadline("");
       setLiquidity("10");
       setPriceFeed(PRICE_FEEDS[0].address);
@@ -366,22 +389,13 @@ export default function AdminPage() {
           )}
 
           <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Question</label>
-              <input
-                className="arc-input"
-                placeholder="Will USDC depeg below $0.99 before Dec 31, 2026?"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-              />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Category</label>
                 <select className="arc-input" value={category} onChange={(e) => {
                   const val = e.target.value as "DEPEG" | "HACK";
                   setCategory(val);
-                  if (val === "HACK") { setPriceFeed(PRICE_FEEDS[0].address); setFeedMenuOpen(false); }
+                  if (val === "HACK") { setPriceFeed(PRICE_FEEDS[0].address); setFeedMenuOpen(false); setDepegAsset(""); setDepegThreshold(""); }
                 }}>
                   <option value="DEPEG">DEPEG</option>
                   <option value="HACK">HACK</option>
@@ -397,6 +411,54 @@ export default function AdminPage() {
                   onChange={(e) => setDeadline(e.target.value)}
                 />
               </div>
+            </div>
+
+            {/* DEPEG-specific fields */}
+            {category === "DEPEG" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Asset Name</label>
+                  <input
+                    className="arc-input"
+                    placeholder="USDC, DAI, FRAX…"
+                    value={depegAsset}
+                    onChange={(e) => setDepegAsset(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Depeg Threshold (USD)</label>
+                  <div className="flex items-center gap-2 rounded-xl border border-[rgba(116,91,255,0.2)] bg-white/80 px-4 py-3">
+                    <span className="text-sm font-bold text-slate-400">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max="0.9999"
+                      placeholder="0.97"
+                      className="flex-1 bg-transparent text-lg font-bold text-slate-800 outline-none placeholder:text-slate-300"
+                      value={depegThreshold}
+                      onChange={(e) => setDepegThreshold(e.target.value)}
+                    />
+                    <span className="text-sm font-semibold text-slate-400">USD</span>
+                  </div>
+                  {depegThreshold && (Number(depegThreshold) <= 0 || Number(depegThreshold) >= 1) && (
+                    <p className="mt-1 text-xs text-no-red">Threshold must be between $0.01 and $0.99</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="mb-1.5 flex items-center justify-between text-xs font-bold uppercase tracking-widest text-slate-400">
+                <span>Question</span>
+                {category === "DEPEG" && <span className="normal-case font-normal text-[#745BFF]">auto-generated — edit to customise</span>}
+              </label>
+              <input
+                className="arc-input"
+                placeholder="Will USDC depeg below $0.99 before Dec 31, 2026?"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+              />
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Initial Liquidity (USDC)</label>
@@ -434,7 +496,7 @@ export default function AdminPage() {
                     <button
                       key={feed.address}
                       type="button"
-                      onClick={() => { setPriceFeed(feed.address); setFeedMenuOpen(false); }}
+                      onClick={() => { setPriceFeed(feed.address); setFeedMenuOpen(false); if (feed.coin) setDepegAsset(feed.coin); }}
                       className={`flex w-full items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-[rgba(116,91,255,0.06)] ${
                         priceFeed === feed.address ? "bg-[rgba(116,91,255,0.08)] font-semibold text-[#745BFF]" : "text-slate-700"
                       }`}
