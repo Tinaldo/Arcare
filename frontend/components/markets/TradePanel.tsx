@@ -21,8 +21,8 @@ const SLIPPAGE = 0.005; // 0.5%
 
 export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) {
   const { isConnected, connect } = walletState;
-  const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI)
-  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI)
+  const market = useContract(marketAddress as `0x${string}`, PREDICTION_MARKET_ABI);
+  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
 
   const [action, setAction] = useState<Action>("BUY");
   const [outcome, setOutcome] = useState<Outcome>("YES");
@@ -31,7 +31,6 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
   const [txStep, setTxStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Live preview — debounced
   useEffect(() => {
     setPreview(null);
     if (!amount || parseFloat(amount) <= 0) return;
@@ -73,9 +72,8 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
 
     try {
       if (action === "BUY") {
-        setTxStep("Step 1 of 2: Approve USDC spend…");
+        setTxStep("Step 1 of 2: Approve USDC…");
         await usdc.write("approve", [marketAddress, amtBig]);
-
         setTxStep("Step 2 of 2: Confirm trade…");
         const minOut = BigInt(Math.floor(Number(amtBig) * (1 - SLIPPAGE)));
         await market.write("buyOutcome", [isYes, amtBig, minOut]);
@@ -84,7 +82,6 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
         const minOut = BigInt(Math.floor(Number(amtBig) * (1 - SLIPPAGE)));
         await market.write("sellOutcome", [isYes, amtBig, minOut]);
       }
-
       setAmount("");
       setTxStep(null);
       onTxComplete?.();
@@ -95,15 +92,17 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
   };
 
   return (
-    <div className="rounded-2xl border border-arc-border bg-arc-card p-5">
+    <div className="glass-card p-5">
       {/* BUY / SELL tabs */}
-      <div className="mb-4 flex rounded-xl bg-slate-100 p-1">
+      <div className="mb-4 flex rounded-full bg-[rgba(116,91,255,0.08)] p-1">
         {(["BUY", "SELL"] as Action[]).map((a) => (
           <button
             key={a}
             onClick={() => setAction(a)}
-            className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-colors ${
-              action === a ? "bg-arc-blue text-white" : "text-slate-400 hover:text-slate-700"
+            className={`flex-1 rounded-full py-2 text-sm font-bold transition-all ${
+              action === a
+                ? "bg-[#745BFF] text-white shadow-md shadow-[#745BFF]/30"
+                : "text-slate-400 hover:text-slate-700"
             }`}
           >
             {a}
@@ -117,12 +116,12 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
           <button
             key={o}
             onClick={() => setOutcome(o)}
-            className={`flex-1 rounded-xl border py-2 text-sm font-semibold transition-colors ${
+            className={`flex-1 rounded-xl border py-2.5 text-sm font-bold transition-all ${
               outcome === o
                 ? o === "YES"
-                  ? "border-yes-green bg-yes-green/15 text-yes-green"
-                  : "border-no-red bg-no-red/15 text-no-red"
-                : "border-arc-border text-slate-400 hover:border-slate-400 hover:text-slate-700"
+                  ? "border-yes-green bg-yes-green/10 text-yes-green"
+                  : "border-no-red bg-no-red/10 text-no-red"
+                : "border-[rgba(116,91,255,0.12)] text-slate-400 hover:border-slate-300 hover:text-slate-600"
             }`}
           >
             {o}
@@ -132,33 +131,37 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
 
       {/* Amount input */}
       <div className="mb-3">
-        <label className="mb-1 block text-xs text-slate-500">
+        <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
           {action === "BUY" ? "USDC to spend" : `${outcome} tokens to sell`}
         </label>
-        <div className="flex items-center gap-2 rounded-xl border border-arc-border bg-slate-50 px-4 py-3">
+        <div className="flex items-center gap-2 rounded-xl border border-[rgba(116,91,255,0.2)] bg-white/80 px-4 py-3">
           <input
             type="number"
             min="0"
             placeholder="0.00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="flex-1 bg-transparent text-lg font-medium text-slate-800 outline-none placeholder:text-slate-300"
+            className="flex-1 bg-transparent text-lg font-bold text-slate-800 outline-none placeholder:text-slate-300 placeholder:font-normal"
           />
-          <span className="text-sm text-slate-400">{action === "BUY" ? "USDC" : outcome}</span>
+          <span className="text-sm font-semibold text-slate-400">{action === "BUY" ? "USDC" : outcome}</span>
         </div>
       </div>
 
       {preview && (
-        <p className="mb-3 text-center text-sm text-slate-500">{preview}</p>
+        <div className="mb-3 rounded-xl bg-[#745BFF]/8 border border-[rgba(116,91,255,0.15)] px-4 py-2.5 text-center text-sm font-semibold text-[#745BFF]">
+          {preview}
+        </div>
       )}
 
       <button
         onClick={handleTrade}
         disabled={!!txStep}
-        className="arc-btn-primary flex w-full items-center justify-center gap-2 py-3 text-sm font-semibold disabled:opacity-60"
+        className="arc-btn-primary w-full py-3 text-sm disabled:opacity-60"
       >
         {txStep ? (
-          <><Spinner size={16} />{txStep}</>
+          <span className="flex items-center justify-center gap-2">
+            <Spinner size={16} />{txStep}
+          </span>
         ) : isConnected ? (
           `${action} ${outcome}`
         ) : (
@@ -166,7 +169,11 @@ export function TradePanel({ marketAddress, walletState, onTxComplete }: Props) 
         )}
       </button>
 
-      {error && <p className="mt-3 text-center text-sm text-red-400">{error}</p>}
+      {error && (
+        <p className="mt-3 rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-center text-sm text-red-500">
+          {error}
+        </p>
+      )}
       <p className="mt-3 text-center text-xs text-slate-400">0.5% slippage tolerance</p>
     </div>
   );

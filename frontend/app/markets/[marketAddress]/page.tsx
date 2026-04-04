@@ -74,54 +74,72 @@ export default function MarketPage() {
   }
 
   if (!market) {
-    return <div className="py-20 text-center text-gray-500">Market not found.</div>;
+    return <div className="py-20 text-center text-slate-400">Market not found.</div>;
   }
 
   const catVariant = market.category === "DEPEG" ? "depeg" : "hack";
+  const yesPct = Math.round((Number(market.yesPrice) / 1e18) * 100);
 
   return (
     <div>
-      <Link href="/" className="mb-6 inline-flex items-center gap-1 text-sm text-slate-400 hover:text-slate-800">
-        ← All Markets
+      <Link
+        href="/"
+        className="mb-6 inline-flex items-center gap-1.5 rounded-full bg-white/60 border border-[rgba(116,91,255,0.12)] px-4 py-1.5 text-sm font-semibold text-slate-500 hover:text-[#745BFF] transition-colors"
+      >
+        <span className="material-symbols-outlined text-[16px]">arrow_back</span>
+        All Markets
       </Link>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <div className="rounded-2xl border border-arc-border bg-arc-card p-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Left: market info */}
+        <div className="space-y-5 lg:col-span-2">
+          <div className="glass-card p-6">
             <div className="mb-3 flex flex-wrap gap-2">
               <Badge label={market.category} variant={catVariant} />
               <Badge label={market.resolved ? "Resolved" : "Active"} variant={market.resolved ? "resolved" : "active"} />
             </div>
-            <h1 className="mb-4 text-xl font-bold leading-snug text-slate-900">{market.question}</h1>
+            <h1 className="mb-4 text-xl font-extrabold leading-snug text-slate-900">{market.question}</h1>
+
+            {/* Big probability display */}
+            <div className="mb-4 flex items-baseline gap-2">
+              <span className="text-4xl font-extrabold text-[#745BFF]">{yesPct}%</span>
+              <span className="text-sm text-slate-400 font-medium">probability of YES</span>
+            </div>
+
             <ProbabilityBar yesPrice={market.yesPrice} noPrice={market.noPrice} />
-            <div className="mt-5 grid grid-cols-3 divide-x divide-arc-border rounded-xl border border-arc-border">
+
+            <div className="mt-5 grid grid-cols-3 gap-3">
               {[
-                { label: "Liquidity", value: `${formatUsdc(market.totalCollateral)} USDC` },
-                { label: "Deadline", value: formatDeadline(market.deadline) },
-                { label: "Outcome", value: market.resolved ? (market.yesWins ? "YES ✓" : "NO ✓") : "Open" },
+                { icon: "water_drop", label: "Liquidity", value: `${formatUsdc(market.totalCollateral)} USDC` },
+                { icon: "event", label: "Deadline", value: formatDeadline(market.deadline) },
+                { icon: "check_circle", label: "Outcome", value: market.resolved ? (market.yesWins ? "YES ✓" : "NO ✓") : "Open" },
               ].map((s) => (
-                <div key={s.label} className="px-4 py-3 text-center">
-                  <div className="text-sm font-semibold text-slate-800">{s.value}</div>
-                  <div className="text-xs text-slate-400">{s.label}</div>
+                <div key={s.label} className="rounded-xl bg-[rgba(116,91,255,0.05)] border border-[rgba(116,91,255,0.1)] px-4 py-3 text-center">
+                  <div className="mb-0.5 flex justify-center">
+                    <span className="material-symbols-outlined text-[16px] text-[#745BFF]">{s.icon}</span>
+                  </div>
+                  <div className="text-sm font-bold text-slate-800">{s.value}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{s.label}</div>
                 </div>
               ))}
             </div>
           </div>
 
+          {/* User position */}
           {isConnected && (userYes > 0n || userNo > 0n) && (
-            <div className="rounded-2xl border border-arc-border bg-arc-card p-5">
-              <h3 className="mb-3 text-sm font-semibold text-slate-600">Your Position</h3>
+            <div className="glass-card p-5">
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-slate-400">Your Position</h3>
               <div className="flex gap-4">
                 {userYes > 0n && (
-                  <div className="flex-1 rounded-xl border border-yes-green/30 bg-yes-green/10 p-3 text-center">
-                    <div className="text-lg font-bold text-yes-green">{formatUsdc(userYes)}</div>
-                    <div className="text-xs text-slate-400">YES tokens</div>
+                  <div className="flex-1 rounded-xl border border-yes-green/25 bg-yes-green/8 p-3 text-center">
+                    <div className="text-lg font-extrabold text-yes-green">{formatUsdc(userYes)}</div>
+                    <div className="text-xs text-slate-400 font-medium">YES tokens</div>
                   </div>
                 )}
                 {userNo > 0n && (
-                  <div className="flex-1 rounded-xl border border-no-red/30 bg-no-red/10 p-3 text-center">
-                    <div className="text-lg font-bold text-no-red">{formatUsdc(userNo)}</div>
-                    <div className="text-xs text-slate-400">NO tokens</div>
+                  <div className="flex-1 rounded-xl border border-no-red/25 bg-no-red/8 p-3 text-center">
+                    <div className="text-lg font-extrabold text-no-red">{formatUsdc(userNo)}</div>
+                    <div className="text-xs text-slate-400 font-medium">NO tokens</div>
                   </div>
                 )}
               </div>
@@ -133,6 +151,7 @@ export default function MarketPage() {
           )}
         </div>
 
+        {/* Right: trade/redeem panel */}
         <div className="space-y-4">
           {market.resolved ? (
             <RedeemPanel market={market} walletState={walletState} userYesBalance={userYes} userNoBalance={userNo} onComplete={refresh} />
@@ -143,9 +162,10 @@ export default function MarketPage() {
             href={`https://testnet.arcscan.app/address/${marketAddress}`}
             target="_blank"
             rel="noreferrer"
-            className="block rounded-xl border border-arc-border bg-arc-card px-4 py-3 text-center text-xs text-slate-400 hover:text-slate-700"
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-[rgba(116,91,255,0.12)] bg-white/50 px-4 py-3 text-xs font-semibold text-slate-400 hover:text-[#745BFF] transition-colors"
           >
-            View contract on ArcScan ↗
+            <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+            View on ArcScan
           </a>
         </div>
       </div>

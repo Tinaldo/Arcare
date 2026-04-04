@@ -15,15 +15,14 @@ export default function AdminPage() {
   const { isConnected, address, connect } = useWallet();
   const router = useRouter();
 
-  const factory = useContract(MARKET_FACTORY_ADDRESS, MARKET_FACTORY_ABI)
-  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI)
+  const factory = useContract(MARKET_FACTORY_ADDRESS, MARKET_FACTORY_ABI);
+  const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
 
   const [roles, setRoles] = useState<Roles | null>(null);
   const [adminRoleHash, setAdminRoleHash] = useState<`0x${string}` | null>(null);
   const [creatorRoleHash, setCreatorRoleHash] = useState<`0x${string}` | null>(null);
   const [loadingRoles, setLoadingRoles] = useState(false);
 
-  // Create market form
   const [question, setQuestion] = useState("");
   const [category, setCategory] = useState<"DEPEG" | "HACK">("DEPEG");
   const [deadline, setDeadline] = useState("");
@@ -32,7 +31,6 @@ export default function AdminPage() {
   const [createError, setCreateError] = useState("");
   const [createDone, setCreateDone] = useState(false);
 
-  // Role management form
   const [roleTarget, setRoleTarget] = useState("");
   const [roleStep, setRoleStep] = useState<string | null>(null);
   const [roleError, setRoleError] = useState("");
@@ -56,7 +54,6 @@ export default function AdminPage() {
       ]);
       setCreatorRoleHash(creatorRole);
       setAdminRoleHash(adminRole);
-
       const [isCreator, isAdmin] = await Promise.all([
         arcClient.readContract({
           address: MARKET_FACTORY_ADDRESS,
@@ -83,32 +80,24 @@ export default function AdminPage() {
     if (isConnected) void loadRoles();
   }, [isConnected, loadRoles]);
 
-  // ── Create Market ─────────────────────────────────────────────────────────
-
   const handleCreateMarket = async () => {
     if (!isConnected) { connect(); return; }
     setCreateError("");
     setCreateDone(false);
-
     if (!question.trim()) { setCreateError("Enter a question"); return; }
     if (!deadline) { setCreateError("Select a resolution date"); return; }
-
     const deadlineTs = Math.floor(new Date(deadline).getTime() / 1000);
     if (deadlineTs <= Math.floor(Date.now() / 1000)) {
       setCreateError("Deadline must be in the future");
       return;
     }
-
     const liqUsdc = parseUsdc(liquidity);
     if (liqUsdc === 0n) { setCreateError("Enter initial liquidity"); return; }
-
     try {
-      setCreateStep("Step 1 of 2: Approve USDC...");
+      setCreateStep("Step 1 of 2: Approve USDC…");
       await usdc.write("approve", [MARKET_FACTORY_ADDRESS, liqUsdc]);
-
-      setCreateStep("Step 2 of 2: Creating market...");
+      setCreateStep("Step 2 of 2: Creating market…");
       await factory.write("createMarket", [question, category, BigInt(deadlineTs), liqUsdc]);
-
       setCreateDone(true);
       setCreateStep(null);
       setQuestion("");
@@ -120,8 +109,6 @@ export default function AdminPage() {
     }
   };
 
-  // ── Grant / Revoke Role ───────────────────────────────────────────────────
-
   const handleRole = async (action: "grant" | "revoke") => {
     if (!isConnected) { connect(); return; }
     if (!roleTarget.startsWith("0x") || roleTarget.length !== 42) {
@@ -130,12 +117,11 @@ export default function AdminPage() {
     }
     setRoleError("");
     setRoleDone("");
-    setRoleStep(`${action === "grant" ? "Granting" : "Revoking"} role...`);
-
+    setRoleStep(`${action === "grant" ? "Granting" : "Revoking"} role…`);
     try {
       const fn = action === "grant" ? "grantMarketCreator" : "revokeMarketCreator";
       await factory.write(fn, [roleTarget]);
-      setRoleDone(`Role ${action === "grant" ? "granted to" : "revoked from"} ${roleTarget.slice(0, 10)}...`);
+      setRoleDone(`Role ${action === "grant" ? "granted to" : "revoked from"} ${roleTarget.slice(0, 10)}…`);
       setRoleTarget("");
     } catch (e: unknown) {
       setRoleError((e as Error).message ?? "Transaction failed");
@@ -144,12 +130,11 @@ export default function AdminPage() {
     }
   };
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   if (!isConnected) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <p className="text-slate-500">Connect your wallet to access the admin dashboard.</p>
+        <span className="material-symbols-outlined text-[48px] text-slate-300">admin_panel_settings</span>
+        <p className="text-slate-500 font-medium">Connect your wallet to access the admin dashboard.</p>
         <button onClick={connect} className="arc-btn-primary px-6 py-2.5">
           Connect Wallet
         </button>
@@ -160,7 +145,8 @@ export default function AdminPage() {
   if (MARKET_FACTORY_ADDRESS === "0x0") {
     return (
       <div className="py-20 text-center text-slate-500">
-        Deploy contracts first and set <code className="text-arc-blue">NEXT_PUBLIC_MARKET_FACTORY_ADDRESS</code> in .env.local
+        Deploy contracts first and set{" "}
+        <code className="font-mono text-[#745BFF]">NEXT_PUBLIC_MARKET_FACTORY_ADDRESS</code> in .env.local
       </div>
     );
   }
@@ -172,13 +158,16 @@ export default function AdminPage() {
   if (!roles.isAdmin && !roles.isCreator) {
     return (
       <div className="mx-auto max-w-2xl">
-        <h1 className="mb-6 text-2xl font-bold text-slate-900">Admin Dashboard</h1>
-        <div className="rounded-2xl border border-arc-border bg-white p-6 space-y-4">
-          <p className="font-semibold text-slate-800">Your wallet does not have a market creator role.</p>
+        <h1 className="mb-6 text-2xl font-extrabold text-slate-900">Admin Dashboard</h1>
+        <div className="glass-card p-6 space-y-4">
+          <div className="flex items-center gap-2 text-slate-800 font-semibold">
+            <span className="material-symbols-outlined text-[20px] text-orange-500">warning</span>
+            Your wallet does not have a market creator role.
+          </div>
           <p className="text-sm text-slate-500">
-            Your wallet address: <code className="text-arc-blue">{address}</code>
+            Wallet: <code className="font-mono text-[#745BFF] text-xs">{address}</code>
           </p>
-          <pre className="overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs text-green-400">
+          <pre className="overflow-x-auto rounded-xl bg-slate-900 p-4 text-xs text-green-400 whitespace-pre-wrap break-all">
 {`cast send ${MARKET_FACTORY_ADDRESS} \\
   "grantMarketCreator(address)" ${address} \\
   --rpc-url https://rpc.testnet.arc.network \\
@@ -190,17 +179,17 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Admin Dashboard</h1>
+        <h1 className="text-2xl font-extrabold text-slate-900">Admin Dashboard</h1>
         <div className="flex gap-2">
           {roles.isCreator && (
-            <span className="rounded-full bg-arc-blue/10 px-3 py-1 text-xs font-semibold text-arc-blue">
+            <span className="rounded-full bg-[#745BFF]/10 px-3 py-1 text-xs font-bold text-[#745BFF]">
               Market Creator
             </span>
           )}
           {roles.isAdmin && (
-            <span className="rounded-full bg-arc-purple/10 px-3 py-1 text-xs font-semibold text-arc-purple">
+            <span className="rounded-full bg-[#5b3ee5]/10 px-3 py-1 text-xs font-bold text-[#5b3ee5]">
               Admin
             </span>
           )}
@@ -209,19 +198,23 @@ export default function AdminPage() {
 
       {/* Create Market */}
       {roles.isCreator && (
-        <div className="rounded-2xl border border-arc-border bg-white p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-slate-900">Create Market</h2>
+        <div className="glass-card p-6 space-y-5">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <span className="material-symbols-outlined text-[20px] text-[#745BFF]">add_circle</span>
+            Create Market
+          </h2>
 
           {createDone && (
-            <div className="rounded-xl border border-yes-green/30 bg-yes-green/10 p-4 text-yes-green font-medium">
-              Market created successfully!{" "}
-              <button onClick={() => router.push("/")} className="underline">View markets</button>
+            <div className="flex items-center gap-2 rounded-xl border border-yes-green/30 bg-yes-green/8 p-4 text-yes-green font-semibold">
+              <span className="material-symbols-outlined text-[18px]">check_circle</span>
+              Market created!{" "}
+              <button onClick={() => router.push("/")} className="underline ml-1">View markets</button>
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Question</label>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Question</label>
               <input
                 className="arc-input"
                 placeholder="Will USDC depeg below $0.99 before Dec 31, 2026?"
@@ -231,14 +224,14 @@ export default function AdminPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Category</label>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Category</label>
                 <select className="arc-input" value={category} onChange={(e) => setCategory(e.target.value as "DEPEG" | "HACK")}>
                   <option value="DEPEG">DEPEG</option>
                   <option value="HACK">HACK</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Resolution Date</label>
+                <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Resolution Date</label>
                 <input
                   type="date"
                   className="arc-input"
@@ -249,36 +242,43 @@ export default function AdminPage() {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Initial Liquidity (USDC)</label>
-              <div className="flex items-center gap-2 rounded-xl border border-arc-border bg-slate-50 px-4 py-3">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Initial Liquidity (USDC)</label>
+              <div className="flex items-center gap-2 rounded-xl border border-[rgba(116,91,255,0.2)] bg-white/80 px-4 py-3">
                 <input
                   type="number"
                   min="1"
-                  className="flex-1 bg-transparent text-lg font-medium text-slate-800 outline-none placeholder:text-slate-300"
+                  className="flex-1 bg-transparent text-lg font-bold text-slate-800 outline-none placeholder:text-slate-300"
                   value={liquidity}
                   onChange={(e) => setLiquidity(e.target.value)}
                 />
-                <span className="text-sm text-slate-400">USDC</span>
+                <span className="text-sm font-semibold text-slate-400">USDC</span>
               </div>
             </div>
           </div>
 
-          <button className="arc-btn-primary w-full py-3 gap-2" onClick={handleCreateMarket} disabled={!!createStep}>
+          <button className="arc-btn-primary w-full py-3" onClick={handleCreateMarket} disabled={!!createStep}>
             {createStep ? (
               <span className="flex items-center justify-center gap-2"><Spinner size={16} />{createStep}</span>
             ) : "Create Market"}
           </button>
-          {createError && <p className="text-sm text-red-500">{createError}</p>}
+          {createError && (
+            <p className="rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-sm text-red-500">
+              {createError}
+            </p>
+          )}
         </div>
       )}
 
       {/* Role Management */}
       {roles.isAdmin && (
-        <div className="rounded-2xl border border-arc-border bg-white p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-slate-900">Role Management</h2>
+        <div className="glass-card p-6 space-y-5">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <span className="material-symbols-outlined text-[20px] text-[#745BFF]">manage_accounts</span>
+            Role Management
+          </h2>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Wallet Address</label>
-            <input className="arc-input" placeholder="0x..." value={roleTarget} onChange={(e) => setRoleTarget(e.target.value)} />
+            <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Wallet Address</label>
+            <input className="arc-input" placeholder="0x…" value={roleTarget} onChange={(e) => setRoleTarget(e.target.value)} />
           </div>
           <div className="flex gap-3">
             <button className="arc-btn-primary flex-1 py-2.5 text-sm" onClick={() => handleRole("grant")} disabled={!!roleStep}>
@@ -287,19 +287,28 @@ export default function AdminPage() {
             <button
               onClick={() => handleRole("revoke")}
               disabled={!!roleStep}
-              className="flex-1 rounded-xl border border-no-red py-2.5 text-sm font-semibold text-no-red hover:bg-no-red/5 transition-colors disabled:opacity-50"
+              className="flex-1 rounded-full border border-no-red py-2.5 text-sm font-bold text-no-red hover:bg-no-red/5 transition-colors disabled:opacity-50"
             >
               Revoke Creator Role
             </button>
           </div>
-          {roleDone && <p className="text-sm text-yes-green font-medium">{roleDone}</p>}
-          {roleError && <p className="text-sm text-red-500">{roleError}</p>}
-          <div className="rounded-xl border border-arc-border bg-slate-50 p-4">
-            <p className="text-xs text-slate-500 font-medium mb-1">Your wallet address:</p>
-            <code className="text-xs text-arc-blue break-all">{address}</code>
+          {roleDone && (
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-yes-green">
+              <span className="material-symbols-outlined text-[16px]">check_circle</span>
+              {roleDone}
+            </p>
+          )}
+          {roleError && (
+            <p className="rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-sm text-red-500">
+              {roleError}
+            </p>
+          )}
+          <div className="rounded-xl bg-[rgba(116,91,255,0.05)] border border-[rgba(116,91,255,0.1)] p-4">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1">Your wallet</p>
+            <code className="text-xs text-[#745BFF] break-all font-mono">{address}</code>
           </div>
           {adminRoleHash && creatorRoleHash && (
-            <pre className="text-xs text-slate-700 overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-arc-border bg-slate-50 p-4">
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-4 text-xs text-green-400">
 {`cast send ${MARKET_FACTORY_ADDRESS} "grantMarketCreator(address)" <ADDRESS> --rpc-url https://rpc.testnet.arc.network --account deployer`}
             </pre>
           )}

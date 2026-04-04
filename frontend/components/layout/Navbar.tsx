@@ -1,41 +1,50 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { useWallet } from "@/components/wallet/WalletContext";
 
+const PAGE_TITLES: Record<string, string> = {
+  "/": "Markets",
+  "/portfolio": "Portfolio",
+  "/admin": "Admin",
+};
+
 export function Navbar() {
   const { isConnected } = useWallet();
+  const pathname = usePathname();
+
+  const title = Object.entries(PAGE_TITLES).find(([path]) =>
+    pathname === path || (path !== "/" && pathname.startsWith(path))
+  )?.[1] ?? "InsurArc";
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-arc-border bg-white/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-arc-blue to-arc-purple text-sm font-bold text-white">
+    <header className="sticky top-0 z-40 flex items-center justify-between border-b border-[rgba(116,91,255,0.12)] bg-white/60 backdrop-blur-xl px-6 py-4 lg:px-10">
+      {/* Mobile logo (hidden on lg where sidebar shows) */}
+      <div className="flex items-center gap-3">
+        <Link href="/" className="flex items-center gap-2 lg:hidden">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#745BFF] to-[#5b3ee5] text-sm font-bold text-white">
             IA
           </div>
-          <span className="text-lg font-bold tracking-tight text-slate-900">InsurArc</span>
-          <span className="hidden rounded-full bg-arc-blue/10 px-2 py-0.5 text-xs text-arc-blue sm:block">
-            Testnet
-          </span>
+          <span className="font-bold text-slate-900">InsurArc</span>
         </Link>
-
-        {/* Links */}
-        <div className="hidden items-center gap-6 sm:flex">
-          <Link href="/" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
-            Markets
-          </Link>
-          {isConnected && (
-            <Link href="/admin" className="text-sm text-slate-500 hover:text-slate-900 transition-colors">
-              Admin
-            </Link>
-          )}
-        </div>
-
-        {/* Wallet */}
-        <WalletButton />
+        <h1 className="hidden text-xl font-bold text-slate-900 lg:block">{title}</h1>
       </div>
-    </nav>
+
+      {/* Mobile nav */}
+      <nav className="flex items-center gap-1 lg:hidden">
+        <Link href="/" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-[rgba(116,91,255,0.08)] hover:text-[#745BFF]">
+          Markets
+        </Link>
+        {isConnected && (
+          <Link href="/admin" className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-[rgba(116,91,255,0.08)] hover:text-[#745BFF]">
+            Admin
+          </Link>
+        )}
+      </nav>
+
+      <WalletButton />
+    </header>
   );
 }

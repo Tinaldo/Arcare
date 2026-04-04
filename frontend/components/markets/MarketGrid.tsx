@@ -8,10 +8,10 @@ interface Props {
   markets: MarketOnChain[];
 }
 
-const TABS: { label: string; value: Category | "ALL" }[] = [
-  { label: "All", value: "ALL" },
-  { label: "Depeg", value: "DEPEG" },
-  { label: "Hack", value: "HACK" },
+const TABS: { label: string; value: Category | "ALL"; icon: string }[] = [
+  { label: "All", value: "ALL", icon: "apps" },
+  { label: "Depeg", value: "DEPEG", icon: "currency_exchange" },
+  { label: "Hack", value: "HACK", icon: "bug_report" },
 ];
 
 export function MarketGrid({ markets }: Props) {
@@ -22,29 +22,31 @@ export function MarketGrid({ markets }: Props) {
 
   return (
     <div>
-      {/* Filter tabs */}
-      <div className="mb-6 flex gap-2">
+      {/* Filter pills + count */}
+      <div className="mb-6 flex items-center gap-2">
         {TABS.map((tab) => (
           <button
             key={tab.value}
             onClick={() => setFilter(tab.value)}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-all ${
               filter === tab.value
-                ? "bg-arc-blue text-white"
-                : "text-gray-400 hover:bg-white/10 hover:text-white"
+                ? "bg-[#745BFF] text-white shadow-md shadow-[#745BFF]/30"
+                : "bg-white/60 text-slate-500 hover:bg-white hover:text-[#745BFF] border border-[rgba(116,91,255,0.12)]"
             }`}
           >
+            <span className="material-symbols-outlined text-[16px]">{tab.icon}</span>
             {tab.label}
           </button>
         ))}
-        <span className="ml-auto self-center text-sm text-gray-500">
+        <span className="ml-auto text-sm font-medium text-slate-400">
           {filtered.length} market{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
 
       {filtered.length === 0 ? (
-        <div className="rounded-2xl border border-arc-border bg-arc-card py-20 text-center text-gray-500">
-          No markets yet.
+        <div className="glass-card flex flex-col items-center gap-3 py-20 text-center">
+          <span className="material-symbols-outlined text-[48px] text-slate-300">storefront</span>
+          <p className="text-slate-400 font-medium">No markets yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
