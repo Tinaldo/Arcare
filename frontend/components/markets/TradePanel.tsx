@@ -189,10 +189,10 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTx
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px] text-[#745BFF]">
-                {outcome === "YES" ? "verified_user" : "trending_down"}
+                {outcome === "YES" ? "verified_user" : "trending_up"}
               </span>
               <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
-                If {outcome} resolves
+                {outcome === "YES" ? "If event occurs" : "If event doesn't occur"}
               </span>
             </div>
             <div className="text-right">
@@ -202,7 +202,7 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTx
             </div>
           </div>
 
-          {/* Efficiency */}
+          {/* Stats row */}
           {efficiency > 0 && (
             <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
               <span>You spend</span>
@@ -211,10 +211,21 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTx
           )}
           {efficiency > 0 && (
             <div className="mb-3 flex items-center justify-between text-xs text-slate-500">
-              <span>Coverage ratio</span>
-              <span className="font-bold" style={{ color: "#745BFF" }}>
-                {efficiency.toFixed(2)}× return
-              </span>
+              {outcome === "YES" ? (
+                <>
+                  <span>Coverage ratio</span>
+                  <span className="font-bold" style={{ color: "#745BFF" }}>
+                    {efficiency.toFixed(2)}× payout
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span>Potential yield</span>
+                  <span className="font-bold text-yes-green">
+                    +{((efficiency - 1) * 100).toFixed(1)}% return
+                  </span>
+                </>
+              )}
             </div>
           )}
 
@@ -222,7 +233,7 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTx
           <div className="rounded-lg bg-white/60 px-3 py-2.5">
             <div className="mb-1.5 flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Market probability
+                {outcome === "YES" ? "Event probability" : "Against-event probability"}
               </span>
               <span className="text-xs font-bold" style={{ color: riskColor }}>
                 {probabilityPct}% — {riskLabel}
@@ -237,11 +248,11 @@ export function TradePanel({ marketAddress, walletState, yesPrice, noPrice, onTx
             <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
               {outcome === "YES"
                 ? probabilityPct < 35
-                  ? `Low probability event. Cheap coverage — pay ${parseFloat(amount).toFixed(2)} USDC, receive ${formatUsdc(tokensOut!)} USDC if it occurs.`
+                  ? `Low-probability event. Cheap coverage — pay ${parseFloat(amount).toFixed(2)} USDC, receive ${formatUsdc(tokensOut!)} USDC if it occurs.`
                   : probabilityPct < 60
                   ? `Moderate risk. You pay ${parseFloat(amount).toFixed(2)} USDC for ${formatUsdc(tokensOut!)} USDC coverage.`
                   : `High-probability event. Strong coverage — you receive ${formatUsdc(tokensOut!)} USDC if it occurs.`
-                : `Betting against the event. You receive ${formatUsdc(tokensOut!)} USDC if it does NOT occur.`
+                : `You earn ${formatUsdc(tokensOut!)} USDC (+${((efficiency - 1) * 100).toFixed(1)}% yield) if the event does NOT occur. Market currently prices it at ${probabilityPct}%.`
               }
             </p>
           </div>
