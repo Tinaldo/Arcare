@@ -17,7 +17,7 @@ export function Navbar() {
 
   const title = Object.entries(PAGE_TITLES).find(([path]) =>
     pathname === path || (path !== "/" && pathname.startsWith(path))
-  )?.[1] ?? "InsurArc";
+  )?.[1] ?? "ArCare";
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between border-b border-[rgba(116,91,255,0.12)] bg-white/60 backdrop-blur-xl px-6 py-4 lg:px-10">
@@ -25,9 +25,9 @@ export function Navbar() {
       <div className="flex items-center gap-3">
         <Link href="/" className="flex items-center gap-2 lg:hidden">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#745BFF] to-[#5b3ee5] text-sm font-bold text-white">
-            IA
+            AC
           </div>
-          <span className="font-bold text-slate-900">InsurArc</span>
+          <span className="font-bold text-slate-900">ArCare</span>
         </Link>
         <h1 className="hidden text-xl font-bold text-slate-900 lg:block">{title}</h1>
       </div>

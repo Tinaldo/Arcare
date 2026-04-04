@@ -19,10 +19,10 @@ export function Sidebar() {
       {/* Logo */}
       <Link href="/" className="mb-8 flex items-center gap-3 px-2">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#745BFF] to-[#5b3ee5] text-sm font-bold text-white shadow-lg shadow-[#745BFF]/30">
-          IA
+          AC
         </div>
         <div>
-          <div className="text-base font-bold tracking-tight text-slate-900">InsurArc</div>
+          <div className="text-base font-bold tracking-tight text-slate-900">ArCare</div>
           <div className="text-xs text-[#745BFF] font-medium">Testnet</div>
         </div>
       </Link>

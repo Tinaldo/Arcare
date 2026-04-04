@@ -12,7 +12,7 @@ createAppKit({
   networks: [arcTestnet],
   projectId,
   metadata: {
-    name: 'InsurArc',
+    name: 'ArCare',
     description: 'On-chain insurance prediction market',
     url: 'https://insurArc.xyz',
     icons: [],

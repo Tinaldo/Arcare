@@ -7,7 +7,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <title>InsurArc — Crypto Incident Prediction Market</title>
+        <title>ArCare — Crypto Incident Prediction Market</title>
         <meta name="description" content="Predict stablecoin depegs and protocol hacks on Arc Testnet" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
