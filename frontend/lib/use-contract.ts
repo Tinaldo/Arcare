@@ -1,6 +1,7 @@
 'use client'
 
 import { useWalletClient, usePublicClient } from 'wagmi'
+import { useSwitchChain } from 'wagmi'
 import type { Abi } from 'viem'
 import { arcTestnet } from './arc-client'
 
@@ -24,8 +25,9 @@ export const ERC20_ABI = [
  * and wagmi's publicClient for reads.
  */
 export function useContract(address: `0x${string}`, abi: Abi) {
-  const { data: walletClient } = useWalletClient({ chainId: arcTestnet.id })
+  const { data: walletClient } = useWalletClient()
   const publicClient = usePublicClient({ chainId: arcTestnet.id })
+  const { switchChainAsync } = useSwitchChain()
 
   async function read(functionName: string, args: any[] = []) {
     if (!publicClient) throw new Error('Public client not available')
@@ -34,9 +36,11 @@ export function useContract(address: `0x${string}`, abi: Abi) {
 
   async function write(functionName: string, args: readonly unknown[] = []) {
     if (!walletClient) throw new Error('Wallet not connected')
-    // Dynamic dispatch — abi/functionName/args are runtime values; strict inference not possible here
-    // @ts-expect-error dynamic contract call
-    return walletClient.writeContract({ address, abi, functionName, args })
+    // Switch to Arc Testnet if needed before sending the transaction
+    if (walletClient.chain?.id !== arcTestnet.id) {
+      await switchChainAsync({ chainId: arcTestnet.id })
+    }
+    return walletClient.writeContract({ address, abi, functionName, args, chain: arcTestnet } as any)
   }
 
   return { read, write }
