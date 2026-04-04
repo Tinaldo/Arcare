@@ -151,13 +151,20 @@ contract PredictionMarket {
     }
 
     /// @notice Remove liquidity proportional to LP share ownership.
+    ///         Callable before and after resolution. After resolution, LPs receive
+    ///         their share of the remaining collateral (losing-side tokens + any
+    ///         unclaimed winning tokens). Reserve updates are skipped post-resolution
+    ///         since the AMM is no longer active.
     function removeLiquidity(uint256 shares) external {
         if (shares == 0) revert ZeroAmount();
         if (lpShares[msg.sender] < shares) revert InsufficientBalance();
 
         uint256 usdcOut = (shares * totalCollateral) / totalLPShares;
-        yesReserve -= (shares * yesReserve) / totalLPShares;
-        noReserve -= (shares * noReserve) / totalLPShares;
+
+        if (!resolved) {
+            yesReserve -= (shares * yesReserve) / totalLPShares;
+            noReserve -= (shares * noReserve) / totalLPShares;
+        }
 
         lpShares[msg.sender] -= shares;
         totalLPShares -= shares;
@@ -279,6 +286,7 @@ contract PredictionMarket {
             noOpenInterest -= tokens;
         }
 
+        totalCollateral -= tokens;
         usdc.transfer(msg.sender, tokens);
         emit Redeemed(msg.sender, tokens, tokens);
     }
@@ -320,8 +328,10 @@ contract PredictionMarket {
     }
 
     /// @notice Returns implied probability as 1e18-scaled fixed point.
-    ///         price(YES) = noReserve / (yesReserve + noReserve)
+    ///         After resolution: winning side = 1e18, losing side = 0.
+    ///         Before resolution: price(YES) = noReserve / (yesReserve + noReserve)
     function getPrice(bool isYes) external view returns (uint256) {
+        if (resolved) return (yesWins == isYes) ? 1e18 : 0;
         uint256 total = yesReserve + noReserve;
         if (total == 0) return 0.5e18;
         return isYes ? (noReserve * 1e18) / total : (yesReserve * 1e18) / total;
@@ -344,9 +354,14 @@ contract PredictionMarket {
             uint256 _noPrice
         )
     {
-        uint256 total = yesReserve + noReserve;
-        _yesPrice = total == 0 ? 0.5e18 : (noReserve * 1e18) / total;
-        _noPrice = total == 0 ? 0.5e18 : (yesReserve * 1e18) / total;
+        if (resolved) {
+            _yesPrice = yesWins ? 1e18 : 0;
+            _noPrice  = yesWins ? 0 : 1e18;
+        } else {
+            uint256 total = yesReserve + noReserve;
+            _yesPrice = total == 0 ? 0.5e18 : (noReserve * 1e18) / total;
+            _noPrice  = total == 0 ? 0.5e18 : (yesReserve * 1e18) / total;
+        }
         return (
             question,
             category,

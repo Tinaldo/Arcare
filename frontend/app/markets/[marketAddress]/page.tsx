@@ -225,9 +225,12 @@ export default function MarketPage() {
             </div>
           )}
 
-          {!market.resolved && (
-            <LiquidityPanel marketAddress={marketAddress} walletState={walletState} onComplete={refresh} />
-          )}
+          <LiquidityPanel
+            marketAddress={marketAddress}
+            walletState={walletState}
+            resolved={market.resolved}
+            onComplete={refresh}
+          />
         </div>
 
         {/* Right: trade/redeem panel */}

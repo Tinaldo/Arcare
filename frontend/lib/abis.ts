@@ -1,3 +1,96 @@
+export const DEPEG_RESOLVER_ABI = [
+  {
+    type: "function",
+    name: "createMarket",
+    inputs: [
+      { name: "question", type: "string" },
+      { name: "category", type: "string" },
+      { name: "resolutionDeadline", type: "uint256" },
+      { name: "initialLiquidity", type: "uint256" },
+      { name: "priceFeed", type: "address" },
+    ],
+    outputs: [{ name: "market", type: "address" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "evaluate",
+    inputs: [
+      { name: "feed", type: "address" },
+      { name: "price", type: "int256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "claimLiquidity",
+    inputs: [{ name: "market", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "forceResolve",
+    inputs: [
+      { name: "market", type: "address" },
+      { name: "yesWins", type: "bool" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "depegStates",
+    inputs: [{ name: "market", type: "address" }],
+    outputs: [
+      { name: "level", type: "uint8" },
+      { name: "startBlock", type: "uint64" },
+      { name: "active", type: "bool" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "levels",
+    inputs: [{ name: "index", type: "uint8" }],
+    outputs: [
+      { name: "threshold", type: "uint256" },
+      { name: "requiredBlocks", type: "uint64" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "DepegDetected",
+    inputs: [
+      { name: "market", type: "address", indexed: true },
+      { name: "level", type: "uint8", indexed: false },
+      { name: "price", type: "uint256", indexed: false },
+      { name: "blockNumber", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "DepegEscalated",
+    inputs: [
+      { name: "market", type: "address", indexed: true },
+      { name: "newLevel", type: "uint8", indexed: false },
+      { name: "price", type: "uint256", indexed: false },
+      { name: "blockNumber", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "MarketResolved",
+    inputs: [
+      { name: "market", type: "address", indexed: true },
+      { name: "yesWins", type: "bool", indexed: false },
+      { name: "blockNumber", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
 export const MARKET_FACTORY_ABI = [
   {
     type: "constructor",

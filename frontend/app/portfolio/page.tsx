@@ -5,15 +5,18 @@ import Link from "next/link";
 import { Spinner } from "@/components/ui/Spinner";
 import { useWallet } from "@/components/wallet/WalletContext";
 import { arcClient, formatUsdc } from "@/lib/arc-client";
-import { MARKET_FACTORY_ABI, PREDICTION_MARKET_ABI } from "@/lib/abis";
-import { MARKET_FACTORY_ADDRESS } from "@/lib/addresses";
+import { MARKET_FACTORY_ABI, PREDICTION_MARKET_ABI, DEPEG_RESOLVER_ABI } from "@/lib/abis";
+import { MARKET_FACTORY_ADDRESS, DEPEG_RESOLVER_ADDRESS } from "@/lib/addresses";
+import { useContract } from "@/lib/use-contract";
 import type { MarketOnChain } from "@/lib/types";
+import type { WalletState } from "@/components/wallet/useWallet";
 
 type Position = {
   market: MarketOnChain;
   yesBalance: bigint;
   noBalance: bigint;
   lpShares: bigint;
+  resolverLPShares: bigint;
   totalLPShares: bigint;
 };
 
@@ -53,7 +56,7 @@ async function loadPositions(address: `0x${string}`): Promise<Position[]> {
 
   const results = await Promise.all(
     addresses.map(async (addr) => {
-      const [info, yesBalance, noBalance, lpShares, totalLPShares] = await Promise.all([
+      const [info, yesBalance, noBalance, lpShares, resolverLPShares, totalLPShares] = await Promise.all([
         arcClient.readContract({
           address: addr,
           abi: PREDICTION_MARKET_ABI,
@@ -80,6 +83,12 @@ async function loadPositions(address: `0x${string}`): Promise<Position[]> {
         arcClient.readContract({
           address: addr,
           abi: PREDICTION_MARKET_ABI,
+          functionName: "lpShares",
+          args: [DEPEG_RESOLVER_ADDRESS as `0x${string}`],
+        }) as Promise<bigint>,
+        arcClient.readContract({
+          address: addr,
+          abi: PREDICTION_MARKET_ABI,
           functionName: "totalLPShares",
         }) as Promise<bigint>,
       ]);
@@ -92,14 +101,14 @@ async function loadPositions(address: `0x${string}`): Promise<Position[]> {
         yesBalance,
         noBalance,
         lpShares,
+        resolverLPShares,
         totalLPShares,
       } satisfies Position;
     })
   );
 
-  // Only return markets where the user has a position
   return results.filter(
-    (p) => p.yesBalance > 0n || p.noBalance > 0n || p.lpShares > 0n
+    (p) => p.yesBalance > 0n || p.noBalance > 0n || p.lpShares > 0n || p.resolverLPShares > 0n
   );
 }
 
@@ -123,8 +132,15 @@ function CoverageBar({ pct }: { pct: number }) {
   );
 }
 
-function PositionCard({ pos }: { pos: Position }) {
-  const { market, yesBalance, noBalance, lpShares, totalLPShares } = pos;
+function PositionCard({ pos, walletState, onComplete }: { pos: Position; walletState: WalletState; onComplete: () => void }) {
+  const { market, yesBalance, noBalance, lpShares, resolverLPShares, totalLPShares } = pos;
+  const { isConnected, connect } = walletState;
+  const contract = useContract(market.address as `0x${string}`, PREDICTION_MARKET_ABI);
+  const resolver = useContract(DEPEG_RESOLVER_ADDRESS as `0x${string}`, DEPEG_RESOLVER_ABI);
+
+  const [txStep, setTxStep] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   const yesPct = pct(market.yesPrice);
   const noPct = pct(market.noPrice);
 
@@ -135,6 +151,53 @@ function PositionCard({ pos }: { pos: Position }) {
     : 0n;
 
   const isHack = market.category === "HACK";
+
+  const handleRedeem = async () => {
+    if (!isConnected) { connect(); return; }
+    setError(null);
+    setTxStep("Redeeming…");
+    try {
+      await contract.write("redeem", []);
+      onComplete();
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Transaction failed");
+    } finally {
+      setTxStep(null);
+    }
+  };
+
+  const handleWithdrawLP = async () => {
+    if (!isConnected) { connect(); return; }
+    setError(null);
+    setTxStep("Withdrawing liquidity…");
+    try {
+      await contract.write("removeLiquidity", [lpShares]);
+      onComplete();
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Transaction failed");
+    } finally {
+      setTxStep(null);
+    }
+  };
+
+  const handleClaimProtocolLP = async () => {
+    if (!isConnected) { connect(); return; }
+    setError(null);
+    setTxStep("Claiming protocol liquidity…");
+    try {
+      await resolver.write("claimLiquidity", [market.address]);
+      onComplete();
+    } catch (e: unknown) {
+      setError((e as Error).message ?? "Transaction failed");
+    } finally {
+      setTxStep(null);
+    }
+  };
+
+  const canRedeem = market.resolved && (
+    (market.yesWins && yesBalance > 0n) || (!market.yesWins && noBalance > 0n)
+  );
+  const redeemAmount = market.yesWins ? yesBalance : noBalance;
 
   return (
     <div className="glass-card p-5 space-y-4">
@@ -165,7 +228,7 @@ function PositionCard({ pos }: { pos: Position }) {
         </div>
       </div>
 
-      {/* YES position (protection / bet) */}
+      {/* YES position */}
       {yesBalance > 0n && (
         <div className="rounded-xl border border-[rgba(116,91,255,0.12)] bg-[rgba(116,91,255,0.04)] p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -188,21 +251,15 @@ function PositionCard({ pos }: { pos: Position }) {
             </div>
           </div>
 
-          {/* Coverage indicator */}
           <div className="rounded-lg bg-white/60 px-3 py-2.5">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-slate-600">
-                Coverage level
-              </span>
+              <span className="text-xs font-semibold text-slate-600">Coverage level</span>
               <span className="text-xs font-bold text-[#745BFF]">{yesPct}% probability</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
               <div
                 className="h-full rounded-full transition-all"
-                style={{
-                  width: `${yesPct}%`,
-                  background: `linear-gradient(90deg, #5b3ee5, #745BFF)`,
-                }}
+                style={{ width: `${yesPct}%`, background: `linear-gradient(90deg, #5b3ee5, #745BFF)` }}
               />
             </div>
             <p className="mt-1.5 text-[11px] text-slate-500">
@@ -212,16 +269,6 @@ function PositionCard({ pos }: { pos: Position }) {
               {yesPct >= 60 && " High risk — event is likely, your payout is well covered."}
             </p>
           </div>
-
-          {market.resolved && market.yesWins && (
-            <Link
-              href={`/markets/${market.address}`}
-              className="mt-3 flex items-center justify-center gap-2 rounded-full bg-yes-green py-2.5 text-sm font-bold text-white hover:opacity-90 transition-opacity"
-            >
-              <span className="material-symbols-outlined text-[16px]">redeem</span>
-              Redeem {formatUsdc(yesBalance)} USDC
-            </Link>
-          )}
         </div>
       )}
 
@@ -249,22 +296,12 @@ function PositionCard({ pos }: { pos: Position }) {
           </div>
 
           <CoverageBar pct={noPct} />
-
-          {market.resolved && !market.yesWins && (
-            <Link
-              href={`/markets/${market.address}`}
-              className="mt-3 flex items-center justify-center gap-2 rounded-full bg-yes-green py-2.5 text-sm font-bold text-white hover:opacity-90 transition-opacity"
-            >
-              <span className="material-symbols-outlined text-[16px]">redeem</span>
-              Redeem {formatUsdc(noBalance)} USDC
-            </Link>
-          )}
         </div>
       )}
 
       {/* LP position */}
       {lpShares > 0n && (
-        <div className="rounded-xl border border-[rgba(116,91,255,0.12)] bg-white/40 p-4">
+        <div className="rounded-xl border border-[rgba(116,91,255,0.12)] bg-white/40 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px] text-[#745BFF]">water_drop</span>
@@ -275,7 +312,63 @@ function PositionCard({ pos }: { pos: Position }) {
               <div className="text-[10px] text-slate-400">{formatUsdc(lpShares)} shares</div>
             </div>
           </div>
+          <button
+            onClick={handleWithdrawLP}
+            disabled={!!txStep}
+            className="w-full rounded-full border border-[#745BFF] py-2 text-sm font-bold text-[#745BFF] hover:bg-[rgba(116,91,255,0.06)] transition-colors disabled:opacity-50"
+          >
+            {txStep === "Withdrawing liquidity…" ? (
+              <span className="flex items-center justify-center gap-2"><Spinner size={14} />Withdrawing…</span>
+            ) : "Withdraw LP"}
+          </button>
         </div>
+      )}
+
+      {/* Protocol LP (initial liquidity held by DepegResolver) */}
+      {resolverLPShares > 0n && (
+        <div className="rounded-xl border border-amber-400/25 bg-amber-50/60 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-amber-500">lock</span>
+              <span className="text-sm font-bold text-slate-700">Protocol LP</span>
+              <span className="text-[10px] text-slate-400">(initial liquidity)</span>
+            </div>
+            <div className="text-right">
+              <div className="text-lg font-extrabold text-slate-900">
+                {formatUsdc(totalLPShares > 0n ? (resolverLPShares * market.totalCollateral) / totalLPShares : 0n)} USDC
+              </div>
+              <div className="text-[10px] text-slate-400">{formatUsdc(resolverLPShares)} shares</div>
+            </div>
+          </div>
+          <button
+            onClick={handleClaimProtocolLP}
+            disabled={!!txStep}
+            className="w-full rounded-full border border-amber-400 py-2 text-sm font-bold text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50"
+          >
+            {txStep === "Claiming protocol liquidity…" ? (
+              <span className="flex items-center justify-center gap-2"><Spinner size={14} />Claiming…</span>
+            ) : "Claim Protocol LP"}
+          </button>
+        </div>
+      )}
+
+      {/* Redeem button — shown when resolved and user holds winning tokens */}
+      {canRedeem && (
+        <button
+          onClick={handleRedeem}
+          disabled={!!txStep}
+          className="w-full flex items-center justify-center gap-2 rounded-full bg-yes-green py-2.5 text-sm font-bold text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+        >
+          {txStep === "Redeeming…" ? (
+            <><Spinner size={14} />Redeeming…</>
+          ) : (
+            <><span className="material-symbols-outlined text-[16px]">redeem</span>Claim {formatUsdc(redeemAmount)} USDC</>
+          )}
+        </button>
+      )}
+
+      {error && (
+        <p className="rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-sm text-red-500">{error}</p>
       )}
     </div>
   );
@@ -284,7 +377,8 @@ function PositionCard({ pos }: { pos: Position }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function PortfolioPage() {
-  const { address, isConnected, connect } = useWallet();
+  const walletState = useWallet();
+  const { address, isConnected, connect } = walletState;
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -320,13 +414,12 @@ export default function PortfolioPage() {
     return <div className="flex justify-center py-20"><Spinner size={32} /></div>;
   }
 
-  // ── Aggregate stats ──────────────────────────────────────────────────────
   const totalProtection = positions.reduce((sum, p) => sum + p.yesBalance, 0n);
   const totalCurrentValue = positions.reduce((sum, p) => {
     const yesVal = markToMarket(p.yesBalance, p.market.yesPrice);
     const noVal = markToMarket(p.noBalance, p.market.noPrice);
     const lpVal = p.totalLPShares > 0n
-      ? (p.lpShares * p.market.totalCollateral) / p.totalLPShares
+      ? ((p.lpShares + p.resolverLPShares) * p.market.totalCollateral) / p.totalLPShares
       : 0n;
     return sum + yesVal + noVal + lpVal;
   }, 0n);
@@ -405,7 +498,7 @@ export default function PortfolioPage() {
             <p className="text-sm font-bold text-yes-green">
               You have {pendingRedemptions.length} resolved market{pendingRedemptions.length > 1 ? "s" : ""} ready to claim!
             </p>
-            <p className="text-xs text-slate-500">Click "Redeem" on the position cards below.</p>
+            <p className="text-xs text-slate-500">Click "Claim" on the position cards below.</p>
           </div>
         </div>
       )}
@@ -413,7 +506,7 @@ export default function PortfolioPage() {
       {/* Position cards */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {positions.map((pos) => (
-          <PositionCard key={pos.market.address} pos={pos} />
+          <PositionCard key={pos.market.address} pos={pos} walletState={walletState} onComplete={refresh} />
         ))}
       </div>
     </div>

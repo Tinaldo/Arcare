@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/Spinner";
 import { useWallet } from "@/components/wallet/WalletContext";
 import { arcClient, parseUsdc } from "@/lib/arc-client";
-import { MARKET_FACTORY_ABI } from "@/lib/abis";
-import { MARKET_FACTORY_ADDRESS, ARC_USDC_ADDRESS } from "@/lib/addresses";
+import { MARKET_FACTORY_ABI, DEPEG_RESOLVER_ABI } from "@/lib/abis";
+import { MARKET_FACTORY_ADDRESS, DEPEG_RESOLVER_ADDRESS, ARC_USDC_ADDRESS } from "@/lib/addresses";
 import { useContract, ERC20_ABI } from "@/lib/use-contract";
 
 type Roles = { isAdmin: boolean; isCreator: boolean };
@@ -31,6 +31,7 @@ export default function AdminPage() {
   const router = useRouter();
 
   const factory = useContract(MARKET_FACTORY_ADDRESS, MARKET_FACTORY_ABI);
+  const resolver = useContract(DEPEG_RESOLVER_ADDRESS, DEPEG_RESOLVER_ABI);
   const usdc = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
 
   const [roles, setRoles] = useState<Roles | null>(null);
@@ -68,6 +69,12 @@ export default function AdminPage() {
   const [roleStep, setRoleStep] = useState<string | null>(null);
   const [roleError, setRoleError] = useState("");
   const [roleDone, setRoleDone] = useState("");
+
+  const [forceResolveTarget, setForceResolveTarget] = useState("");
+  const [forceResolveOutcome, setForceResolveOutcome] = useState<"yes" | "no">("yes");
+  const [forceResolveStep, setForceResolveStep] = useState<string | null>(null);
+  const [forceResolveError, setForceResolveError] = useState("");
+  const [forceResolveDone, setForceResolveDone] = useState("");
 
   // Auto-generate question for DEPEG markets
   useEffect(() => {
@@ -209,9 +216,9 @@ export default function AdminPage() {
     }
     try {
       setCreateStep("Step 1 of 2: Approve USDC…");
-      await usdc.write("approve", [MARKET_FACTORY_ADDRESS, liqUsdc]);
+      await usdc.write("approve", [DEPEG_RESOLVER_ADDRESS, liqUsdc]);
       setCreateStep("Step 2 of 2: Creating market…");
-      await factory.write("createMarket", [question, category, BigInt(deadlineTs), liqUsdc, normalizedPriceFeed]);
+      await resolver.write("createMarket", [question, category, BigInt(deadlineTs), liqUsdc, normalizedPriceFeed]);
       setCreateDone(true);
       setCreateStep(null);
       setQuestion("");
@@ -224,6 +231,21 @@ export default function AdminPage() {
     } catch (e: unknown) {
       setCreateError((e as Error).message ?? "Failed to create market");
       setCreateStep(null);
+    }
+  };
+
+  const handleClaimLiquidity = async (marketAddress: string) => {
+    if (!isConnected) { connect(); return; }
+    setRemoveError("");
+    setRemoveDone("");
+    setRemoveStep("Claiming liquidity…");
+    try {
+      await resolver.write("claimLiquidity", [marketAddress]);
+      setRemoveDone(`Liquidity claimed from ${marketAddress.slice(0, 10)}…`);
+    } catch (e: unknown) {
+      setRemoveError((e as Error).message ?? "Failed to claim liquidity");
+    } finally {
+      setRemoveStep(null);
     }
   };
 
@@ -293,6 +315,27 @@ export default function AdminPage() {
       setRoleError((e as Error).message ?? "Transaction failed");
     } finally {
       setRoleStep(null);
+    }
+  };
+
+  const handleForceResolve = async () => {
+    if (!isConnected) { connect(); return; }
+    const target = forceResolveTarget.trim();
+    if (!target.startsWith("0x") || target.length !== 42) {
+      setForceResolveError("Enter a valid market address");
+      return;
+    }
+    setForceResolveError("");
+    setForceResolveDone("");
+    setForceResolveStep("Sending force resolve…");
+    try {
+      await resolver.write("forceResolve", [target, forceResolveOutcome === "yes"]);
+      setForceResolveDone(`Market ${target.slice(0, 10)}… resolved as ${forceResolveOutcome.toUpperCase()}`);
+      setForceResolveTarget("");
+    } catch (e: unknown) {
+      setForceResolveError((e as Error).message ?? "Transaction failed");
+    } finally {
+      setForceResolveStep(null);
     }
   };
 
@@ -597,6 +640,13 @@ export default function AdminPage() {
                     </div>
                     <div className="flex gap-2">
                       <button
+                        onClick={() => void handleClaimLiquidity(market.address)}
+                        disabled={!!removeStep}
+                        className="rounded-full border border-[#745BFF] px-4 py-2 text-sm font-bold text-[#745BFF] hover:bg-[rgba(116,91,255,0.06)] transition-colors disabled:opacity-50"
+                      >
+                        Claim LP
+                      </button>
+                      <button
                         onClick={() => void handleDeleteMarket(market.address)}
                         disabled={!!removeStep}
                         className="rounded-full border border-no-red px-4 py-2 text-sm font-bold text-no-red hover:bg-no-red/5 transition-colors disabled:opacity-50"
@@ -628,6 +678,65 @@ export default function AdminPage() {
               {removeError}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Force Resolve — admin only, for demos */}
+      {roles.isAdmin && (
+        <div className="glass-card p-6 space-y-5">
+          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <span className="material-symbols-outlined text-[20px] text-[#745BFF]">gavel</span>
+            Force Resolve Market
+          </h2>
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-slate-600">
+            Bypasses the depeg block requirement. Use for demos or emergencies. Calls DepegResolver.forceResolve().
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Market Address</label>
+              <input
+                className="arc-input"
+                placeholder="0x…"
+                value={forceResolveTarget}
+                onChange={(e) => setForceResolveTarget(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Outcome</label>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setForceResolveOutcome("yes")}
+                  className={`flex-1 rounded-full border py-2.5 text-sm font-bold transition-colors ${forceResolveOutcome === "yes" ? "border-yes-green bg-yes-green/10 text-yes-green" : "border-slate-300 text-slate-500 hover:border-yes-green hover:text-yes-green"}`}
+                >
+                  YES wins
+                </button>
+                <button
+                  onClick={() => setForceResolveOutcome("no")}
+                  className={`flex-1 rounded-full border py-2.5 text-sm font-bold transition-colors ${forceResolveOutcome === "no" ? "border-no-red bg-no-red/10 text-no-red" : "border-slate-300 text-slate-500 hover:border-no-red hover:text-no-red"}`}
+                >
+                  NO wins
+                </button>
+              </div>
+            </div>
+            <button
+              className="arc-btn-primary w-full py-3"
+              onClick={() => void handleForceResolve()}
+              disabled={!!forceResolveStep}
+            >
+              {forceResolveStep ? <span className="flex items-center justify-center gap-2"><Spinner size={16} />{forceResolveStep}</span> : "Force Resolve"}
+            </button>
+            {forceResolveDone && (
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-yes-green">
+                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                {forceResolveDone}
+              </p>
+            )}
+            {forceResolveError && (
+              <p className="rounded-xl bg-red-500/8 border border-red-500/20 px-3 py-2 text-sm text-red-500">
+                {forceResolveError}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
