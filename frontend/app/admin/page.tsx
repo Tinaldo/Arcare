@@ -38,11 +38,19 @@ export default function AdminPage() {
   const [creatorRoleHash, setCreatorRoleHash] = useState<`0x${string}` | null>(null);
   const [loadingRoles, setLoadingRoles] = useState(false);
 
+  const PRICE_FEEDS = [
+    { label: "None",       address: "0x0000000000000000000000000000000000000000", coin: "" },
+    { label: "DAI / USD",  address: "0x14866185B1962B63C3Ea9E03Bc1da838bab34C19", coin: "DAI" },
+    { label: "FRAX / USD", address: "0x0b9E1E3a9FEBB3C3AeFc5B3875Ea5Ca8F6CA3519", coin: "FRAX" },
+    { label: "LUSD / USD", address: "0x3D7aE7E594f2f2091Ad8798313450130d0Aba3a0", coin: "LUSD" },
+  ];
+
   const [question, setQuestion] = useState("");
   const [category, setCategory] = useState<"DEPEG" | "HACK">("DEPEG");
   const [deadline, setDeadline] = useState("");
   const [liquidity, setLiquidity] = useState("10");
-  const [priceFeed, setPriceFeed] = useState("");
+  const [priceFeed, setPriceFeed] = useState(PRICE_FEEDS[0].address);
+  const [feedMenuOpen, setFeedMenuOpen] = useState(false);
   const [createStep, setCreateStep] = useState<string | null>(null);
   const [createError, setCreateError] = useState("");
   const [createDone, setCreateDone] = useState(false);
@@ -188,7 +196,7 @@ export default function AdminPage() {
       setQuestion("");
       setDeadline("");
       setLiquidity("10");
-      setPriceFeed("");
+      setPriceFeed(PRICE_FEEDS[0].address);
       void loadManagedMarkets();
     } catch (e: unknown) {
       setCreateError((e as Error).message ?? "Failed to create market");
@@ -370,7 +378,11 @@ export default function AdminPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Category</label>
-                <select className="arc-input" value={category} onChange={(e) => setCategory(e.target.value as "DEPEG" | "HACK")}>
+                <select className="arc-input" value={category} onChange={(e) => {
+                  const val = e.target.value as "DEPEG" | "HACK";
+                  setCategory(val);
+                  if (val === "HACK") { setPriceFeed(PRICE_FEEDS[0].address); setFeedMenuOpen(false); }
+                }}>
                   <option value="DEPEG">DEPEG</option>
                   <option value="HACK">HACK</option>
                 </select>
@@ -399,14 +411,44 @@ export default function AdminPage() {
                 <span className="text-sm font-semibold text-slate-400">USDC</span>
               </div>
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">Price Feed Address (Optional)</label>
-              <input
-                className="arc-input"
-                placeholder="0x…"
-                value={priceFeed}
-                onChange={(e) => setPriceFeed(e.target.value)}
-              />
+            <div className="relative">
+              <label className="mb-1.5 block text-xs font-bold uppercase tracking-widest text-slate-400">
+                Price Feed
+                {category === "HACK" && <span className="ml-2 normal-case font-normal text-slate-400">(not applicable for HACK)</span>}
+              </label>
+              <button
+                type="button"
+                disabled={category === "HACK"}
+                onClick={() => setFeedMenuOpen(!feedMenuOpen)}
+                className="arc-input flex items-center justify-between w-full text-left disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className={priceFeed === PRICE_FEEDS[0].address ? "text-slate-400" : "text-slate-800 font-semibold"}>
+                  {PRICE_FEEDS.find(f => f.address === priceFeed)?.label ?? "Select feed…"}
+                </span>
+                <span className="text-slate-400 text-xs ml-2">{feedMenuOpen ? "▲" : "▼"}</span>
+              </button>
+
+              {feedMenuOpen && category !== "HACK" && (
+                <div className="absolute z-10 mt-1 w-full rounded-xl border border-[rgba(116,91,255,0.2)] bg-white shadow-lg overflow-hidden">
+                  {PRICE_FEEDS.map((feed) => (
+                    <button
+                      key={feed.address}
+                      type="button"
+                      onClick={() => { setPriceFeed(feed.address); setFeedMenuOpen(false); }}
+                      className={`flex w-full items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-[rgba(116,91,255,0.06)] ${
+                        priceFeed === feed.address ? "bg-[rgba(116,91,255,0.08)] font-semibold text-[#745BFF]" : "text-slate-700"
+                      }`}
+                    >
+                      <span>{feed.label}</span>
+                      {feed.coin && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 font-mono">
+                          {feed.address.slice(0, 6)}…{feed.address.slice(-4)}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
