@@ -7,8 +7,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <title>ArCare — Crypto Incident Prediction Market</title>
+        <title>Arcare — Crypto Incident Prediction Market</title>
         <meta name="description" content="Predict stablecoin depegs and protocol hacks on Arc Testnet" />
+        <link rel="icon" href="/branding/logo/logo.png" />
+        <link rel="apple-touch-icon" href="/branding/logo/logo.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { WalletButton } from "@/components/wallet/WalletButton";
 import { useWallet } from "@/components/wallet/WalletContext";
 
@@ -17,18 +18,13 @@ export function Navbar() {
 
   const title = Object.entries(PAGE_TITLES).find(([path]) =>
     pathname === path || (path !== "/" && pathname.startsWith(path))
-  )?.[1] ?? "ArCare";
+  )?.[1] ?? "Arcare";
 
   return (
     <header className="sticky top-0 z-40 flex items-center justify-between border-b border-[rgba(116,91,255,0.12)] bg-white/60 backdrop-blur-xl px-6 py-4 lg:px-10">
       {/* Mobile logo (hidden on lg where sidebar shows) */}
       <div className="flex items-center gap-3">
-        <Link href="/" className="flex items-center gap-2 lg:hidden">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#745BFF] to-[#5b3ee5] text-sm font-bold text-white">
-            AC
-          </div>
-          <span className="font-bold text-slate-900">ArCare</span>
-        </Link>
+        <BrandLogo compact className="lg:hidden" />
         <h1 className="hidden text-xl font-bold text-slate-900 lg:block">{title}</h1>
       </div>
 

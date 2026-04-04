@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "@/components/layout/BrandLogo";
 import { useWallet } from "@/components/wallet/WalletContext";
 
 const NAV = [
@@ -17,15 +18,7 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex w-60 flex-col shrink-0 border-r border-[rgba(116,91,255,0.12)] bg-white/40 backdrop-blur-2xl px-4 py-6 sticky top-0 h-screen">
       {/* Logo */}
-      <Link href="/" className="mb-8 flex items-center gap-3 px-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#745BFF] to-[#5b3ee5] text-sm font-bold text-white shadow-lg shadow-[#745BFF]/30">
-          AC
-        </div>
-        <div>
-          <div className="text-base font-bold tracking-tight text-slate-900">ArCare</div>
-          <div className="text-xs text-[#745BFF] font-medium">Testnet</div>
-        </div>
-      </Link>
+      <BrandLogo className="mb-8 px-2" />
 
       {/* Nav label */}
       <p className="mb-2 px-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
