@@ -153,7 +153,7 @@ export function LiquidityPanel({
       {open && (
         <div className="border-t border-[rgba(116,91,255,0.12)] px-5 pb-5 pt-4 space-y-3">
           <p className="text-xs text-slate-500">
-            Provide {collateralSymbol} to earn trading fees. LP shares are redeemable proportionally.
+            Provide {collateralSymbol} to earn trading fees. LP capital is locked until market resolution.
           </p>
           <div className="flex items-center gap-2 rounded-xl border border-[rgba(116,91,255,0.2)] bg-white/80 px-4 py-3">
             <input
@@ -184,13 +184,10 @@ export function LiquidityPanel({
               <p className="text-xs text-slate-500">
                 Your shares: <span className="font-semibold text-slate-700">{formatStableAmount(lpShares)}</span>
               </p>
-              <button
-                onClick={handleRemove}
-                disabled={!!txStep}
-                className="w-full rounded-full border border-[rgba(116,91,255,0.3)] py-2 text-sm font-semibold text-[#745BFF] hover:bg-[rgba(116,91,255,0.05)] transition-colors disabled:opacity-50"
-              >
-                Remove Liquidity
-              </button>
+              <div className="flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-700">
+                <span className="material-symbols-outlined text-[14px]">lock</span>
+                Locked until resolution
+              </div>
             </div>
           )}
           {error && (

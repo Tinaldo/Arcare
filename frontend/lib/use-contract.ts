@@ -36,11 +36,13 @@ export function useContract(address: `0x${string}`, abi: Abi) {
 
   async function write(functionName: string, args: readonly unknown[] = []) {
     if (!walletClient) throw new Error('Wallet not connected')
-    // Switch to Arc Testnet if needed before sending the transaction
+    if (!publicClient) throw new Error('Public client not available')
     if (walletClient.chain?.id !== arcTestnet.id) {
       await switchChainAsync({ chainId: arcTestnet.id })
     }
-    return walletClient.writeContract({ address, abi, functionName, args, chain: arcTestnet } as any)
+    const hash = await walletClient.writeContract({ address, abi, functionName, args, chain: arcTestnet } as any)
+    await publicClient.waitForTransactionReceipt({ hash })
+    return hash
   }
 
   return { read, write }

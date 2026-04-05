@@ -52,6 +52,13 @@ export const DEPEG_RESOLVER_ABI = [
   },
   {
     type: "function",
+    name: "lastMarketPrice",
+    inputs: [{ name: "market", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "levels",
     inputs: [{ name: "index", type: "uint8" }],
     outputs: [

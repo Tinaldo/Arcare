@@ -72,6 +72,7 @@ contract PredictionMarket {
     error NotFactory();
     error OpenInterestExists();
     error ExternalLiquidityExists();
+    error LiquidityLocked();
 
     // ─── Constructor ──────────────────────────────────────────────────────────
 
@@ -162,18 +163,13 @@ contract PredictionMarket {
     }
 
     /// @notice Remove liquidity proportional to LP share ownership.
-    ///         Callable before and after resolution. After resolution, LPs receive
-    ///         their share of the remaining collateral.
+    ///         Only callable after resolution — LP capital is locked until the market settles.
     function removeLiquidity(uint256 shares) external {
+        if (!resolved) revert LiquidityLocked();
         if (shares == 0) revert ZeroAmount();
         if (lpShares[msg.sender] < shares) revert InsufficientBalance();
 
         uint256 collateralOut = (shares * totalCollateral) / totalLPShares;
-
-        if (!resolved) {
-            yesReserve -= (shares * yesReserve) / totalLPShares;
-            noReserve  -= (shares * noReserve)  / totalLPShares;
-        }
 
         lpShares[msg.sender] -= shares;
         totalLPShares        -= shares;

@@ -265,15 +265,22 @@ function PositionCard({ pos, walletState, onComplete }: { pos: Position; walletS
               <div className="text-[10px] text-slate-400">{formatStableAmount(lpShares)} shares</div>
             </div>
           </div>
-          <button
-            onClick={handleWithdrawLP}
-            disabled={!!txStep}
-            className="w-full rounded-full border border-[#745BFF] py-2 text-sm font-bold text-[#745BFF] transition-colors hover:bg-[rgba(116,91,255,0.06)] disabled:opacity-50"
-          >
-            {txStep === "Withdrawing liquidity…" ? (
-              <span className="flex items-center justify-center gap-2"><Spinner size={14} />Withdrawing…</span>
-            ) : "Withdraw LP"}
-          </button>
+          {market.resolved ? (
+            <button
+              onClick={handleWithdrawLP}
+              disabled={!!txStep}
+              className="w-full rounded-full border border-[#745BFF] py-2 text-sm font-bold text-[#745BFF] transition-colors hover:bg-[rgba(116,91,255,0.06)] disabled:opacity-50"
+            >
+              {txStep === "Withdrawing liquidity…" ? (
+                <span className="flex items-center justify-center gap-2"><Spinner size={14} />Withdrawing…</span>
+              ) : "Withdraw LP"}
+            </button>
+          ) : (
+            <div className="flex items-center justify-center gap-2 rounded-full border border-amber-200 bg-amber-50 py-2 text-xs font-semibold text-amber-700">
+              <span className="material-symbols-outlined text-[14px]">lock</span>
+              Locked until resolution
+            </div>
+          )}
         </div>
       )}
 

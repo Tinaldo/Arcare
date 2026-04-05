@@ -20,6 +20,7 @@ export function MarketGrid({ markets }: Props) {
   const [currency, setCurrency] = useState<string>("ALL");
 
   const currencies = Array.from(new Set(markets.map((market) => market.collateralSymbol)));
+  const showCurrencyFilter = currencies.length > 1;
 
   const filtered = markets.filter((market) => {
     const categoryMatches = filter === "ALL" || market.category === filter;
@@ -49,30 +50,32 @@ export function MarketGrid({ markets }: Props) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-          <div className="flex items-center gap-1 rounded-full border border-[rgba(116,91,255,0.12)] bg-white/70 p-1">
-            <button
-              onClick={() => setCurrency("ALL")}
-              className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all ${
-                currency === "ALL" ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
-              }`}
-            >
-              All
-            </button>
-            {currencies.map((symbol) => (
+          {showCurrencyFilter && (
+            <div className="flex items-center gap-1 rounded-full border border-[rgba(116,91,255,0.12)] bg-white/70 p-1">
               <button
-                key={symbol}
-                onClick={() => setCurrency(symbol)}
-                className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all ${
-                  currency === symbol
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-500 hover:text-slate-900"
+                onClick={() => setCurrency("ALL")}
+                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all ${
+                  currency === "ALL" ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
                 }`}
               >
-                <TokenLogo symbol={symbol} size={16} />
-                {symbol}
+                All
               </button>
-            ))}
-          </div>
+              {currencies.map((symbol) => (
+                <button
+                  key={symbol}
+                  onClick={() => setCurrency(symbol)}
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-widest transition-all ${
+                    currency === symbol
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  <TokenLogo symbol={symbol} size={16} />
+                  {symbol}
+                </button>
+              ))}
+            </div>
+          )}
           <span className="text-sm font-medium text-slate-400">
             {filtered.length} market{filtered.length !== 1 ? "s" : ""}
           </span>
