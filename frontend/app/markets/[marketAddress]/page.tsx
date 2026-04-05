@@ -117,21 +117,41 @@ export default function MarketPage() {
     if (isConnected) void loadUserBalances();
   }, [isConnected, loadUserBalances]);
 
-  // Fetch the price last submitted to DepegResolver on-chain (reflects simulate depeg too)
+  // Fetch live price for DEPEG markets.
+  // Priority: DepegResolver.lastMarketPrice (reflects on-chain / simulated price)
+  // Fallback: Chainlink Sepolia feed (for markets with no price submitted yet)
   useEffect(() => {
     if (!market || market.category !== "DEPEG") return;
-    if (!market.resolverAddress || market.resolverAddress === "0x0") return;
+    const asset = parseDepegAsset(market.question);
+    const feed = asset ? DEPEG_FEEDS[asset] : null;
 
     const fetchPrice = async () => {
-      try {
-        const raw = await arcClient.readContract({
-          address: market.resolverAddress,
-          abi: DEPEG_RESOLVER_ABI,
-          functionName: "lastMarketPrice",
-          args: [market.address as `0x${string}`],
-        }) as bigint;
-        if (raw > 0n) setLivePrice(Number(raw) / 1e8);
-      } catch { /* resolver unavailable */ }
+      // 1. Try DepegResolver on-chain price
+      if (market.resolverAddress && market.resolverAddress !== "0x0") {
+        try {
+          const raw = await arcClient.readContract({
+            address: market.resolverAddress,
+            abi: DEPEG_RESOLVER_ABI,
+            functionName: "lastMarketPrice",
+            args: [market.address as `0x${string}`],
+          }) as bigint;
+          if (raw > 0n) {
+            setLivePrice(Number(raw) / 1e8);
+            return;
+          }
+        } catch { /* fall through */ }
+      }
+      // 2. Fallback: Chainlink Sepolia
+      if (feed) {
+        try {
+          const [, answer] = await sepoliaClient.readContract({
+            address: feed.address,
+            abi: LATEST_ROUND_ABI,
+            functionName: "latestRoundData",
+          }) as [bigint, bigint, bigint, bigint, bigint];
+          setLivePrice(Number(answer) / 1e8);
+        } catch { /* feed unavailable */ }
+      }
     };
     void fetchPrice();
     const id = setInterval(() => void fetchPrice(), 10_000);
@@ -297,9 +317,16 @@ export default function MarketPage() {
         {/* Right: trade/redeem panel */}
         <div className="space-y-4">
           {/* Depeg gauge — DEPEG markets only */}
-          {market.category === "DEPEG" && depegAsset && livePrice !== null && (
+          {market.category === "DEPEG" && depegAsset && (
             <div className="glass-card p-5 flex justify-center">
-              <DepegGauge symbol={depegAsset} price={livePrice} />
+              {livePrice !== null ? (
+                <DepegGauge symbol={depegAsset} price={livePrice} />
+              ) : (
+                <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
+                  <Spinner size={20} />
+                  <span className="text-xs">Loading price…</span>
+                </div>
+              )}
             </div>
           )}
 
