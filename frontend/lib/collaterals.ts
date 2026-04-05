@@ -51,6 +51,16 @@ export function getBalanceCollaterals() {
   return COLLATERALS.filter((collateral) => isConfiguredAddress(collateral.tokenAddress));
 }
 
+// Collaterals where markets can be loaded (factory deployed)
+export function getLoadableCollaterals() {
+  return COLLATERALS.filter(
+    (collateral) =>
+      isConfiguredAddress(collateral.tokenAddress) &&
+      isConfiguredAddress(collateral.factoryAddress)
+  );
+}
+
+// Collaterals where markets can be created (resolver also deployed)
 export function getMarketCollaterals() {
   return COLLATERALS.filter(
     (collateral) =>

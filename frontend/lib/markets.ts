@@ -2,6 +2,7 @@ import { arcClient } from "@/lib/arc-client";
 import { MARKET_FACTORY_ABI, PREDICTION_MARKET_ABI } from "@/lib/abis";
 import {
   getCollateralByTokenAddress,
+  getLoadableCollaterals,
   getMarketCollaterals,
   type CollateralConfig,
 } from "@/lib/collaterals";
@@ -103,7 +104,7 @@ async function loadMarketsForCollateral(collateral: CollateralConfig): Promise<M
 }
 
 export async function loadAllMarkets() {
-  const batches = await Promise.all(getMarketCollaterals().map(loadMarketsForCollateral));
+  const batches = await Promise.all(getLoadableCollaterals().map(loadMarketsForCollateral));
   return sortMarkets(batches.flat());
 }
 
@@ -139,7 +140,7 @@ export async function loadMarketByAddress(address: `0x${string}`): Promise<Marke
 
 export async function loadManagedMarkets(): Promise<ManagedMarket[]> {
   const batches = await Promise.all(
-    getMarketCollaterals().map(async (collateral) => {
+    getLoadableCollaterals().map(async (collateral) => {
       const count = (await arcClient.readContract({
         address: collateral.factoryAddress,
         abi: MARKET_FACTORY_ABI,

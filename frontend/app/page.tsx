@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MarketGrid } from "@/components/markets/MarketGrid";
 import { Spinner } from "@/components/ui/Spinner";
-import { getMarketCollaterals } from "@/lib/collaterals";
+import { getLoadableCollaterals } from "@/lib/collaterals";
 import { loadAllMarkets } from "@/lib/markets";
 import type { MarketOnChain } from "@/lib/types";
 
@@ -11,7 +11,7 @@ export default function HomePage() {
   const [markets, setMarkets] = useState<MarketOnChain[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const hasConfiguredMarkets = getMarketCollaterals().length > 0;
+  const hasConfiguredMarkets = getLoadableCollaterals().length > 0;
 
   useEffect(() => {
     loadAllMarkets()
