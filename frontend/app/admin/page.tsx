@@ -137,35 +137,40 @@ export default function AdminPage() {
     try {
       const checks = await Promise.all(
         CONFIGURED_COLLATERALS.map(async (collateral) => {
-          const [creatorRole, adminRole] = await Promise.all([
-            arcClient.readContract({
-              address: collateral.factoryAddress,
-              abi: MARKET_FACTORY_ABI,
-              functionName: "MARKET_CREATOR_ROLE",
-            }) as Promise<`0x${string}`>,
-            arcClient.readContract({
-              address: collateral.factoryAddress,
-              abi: MARKET_FACTORY_ABI,
-              functionName: "DEFAULT_ADMIN_ROLE",
-            }) as Promise<`0x${string}`>,
-          ]);
+          try {
+            const [creatorRole, adminRole] = await Promise.all([
+              arcClient.readContract({
+                address: collateral.factoryAddress,
+                abi: MARKET_FACTORY_ABI,
+                functionName: "MARKET_CREATOR_ROLE",
+              }) as Promise<`0x${string}`>,
+              arcClient.readContract({
+                address: collateral.factoryAddress,
+                abi: MARKET_FACTORY_ABI,
+                functionName: "DEFAULT_ADMIN_ROLE",
+              }) as Promise<`0x${string}`>,
+            ]);
 
-          const [isCreator, isAdmin] = await Promise.all([
-            arcClient.readContract({
-              address: collateral.factoryAddress,
-              abi: MARKET_FACTORY_ABI,
-              functionName: "hasRole",
-              args: [creatorRole, address],
-            }) as Promise<boolean>,
-            arcClient.readContract({
-              address: collateral.factoryAddress,
-              abi: MARKET_FACTORY_ABI,
-              functionName: "hasRole",
-              args: [adminRole, address],
-            }) as Promise<boolean>,
-          ]);
+            const [isCreator, isAdmin] = await Promise.all([
+              arcClient.readContract({
+                address: collateral.factoryAddress,
+                abi: MARKET_FACTORY_ABI,
+                functionName: "hasRole",
+                args: [creatorRole, address],
+              }) as Promise<boolean>,
+              arcClient.readContract({
+                address: collateral.factoryAddress,
+                abi: MARKET_FACTORY_ABI,
+                functionName: "hasRole",
+                args: [adminRole, address],
+              }) as Promise<boolean>,
+            ]);
 
-          return { symbol: collateral.symbol, isCreator, isAdmin };
+            return { symbol: collateral.symbol, isCreator, isAdmin };
+          } catch {
+            // Factory unreachable or address invalid — skip this collateral
+            return { symbol: collateral.symbol, isCreator: false, isAdmin: false };
+          }
         })
       );
 
@@ -175,8 +180,6 @@ export default function AdminPage() {
         adminCollaterals: checks.filter((check) => check.isAdmin).map((check) => check.symbol),
         creatorCollaterals: checks.filter((check) => check.isCreator).map((check) => check.symbol),
       });
-    } catch {
-      setRoles({ isAdmin: false, isCreator: false, adminCollaterals: [], creatorCollaterals: [] });
     } finally {
       setLoadingRoles(false);
     }
@@ -454,20 +457,25 @@ export default function AdminPage() {
             Your wallet doesn&apos;t have creator access yet.
           </div>
           <p className="text-sm text-slate-500">
-            Share your wallet address with the project admin so they can grant you access on every configured collateral factory.
+            The connected wallet has no <code className="font-mono text-[#745BFF]">MARKET_CREATOR_ROLE</code> or <code className="font-mono text-[#745BFF]">DEFAULT_ADMIN_ROLE</code> on any configured factory.
+            If you are the deployer, run the commands below with the deployer key, then click Retry.
           </p>
 
           <div className="rounded-xl border border-[rgba(116,91,255,0.12)] bg-[rgba(116,91,255,0.05)] p-4">
-            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">Your wallet address</p>
+            <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-400">Connected wallet</p>
             <code className="block break-all font-mono text-sm text-[#745BFF] select-all">{address}</code>
           </div>
 
-          <p className="text-xs text-slate-400">
-            Ask the admin to run these commands with the deployer key:
-          </p>
           <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-4 text-xs text-green-400 select-all">
 {buildGrantCommands(address ?? "<YOUR_ADDRESS>")}
           </pre>
+
+          <button
+            onClick={() => void loadRoles()}
+            className="arc-btn-primary w-full py-2.5 text-sm"
+          >
+            Retry role check
+          </button>
         </div>
       </div>
     );
