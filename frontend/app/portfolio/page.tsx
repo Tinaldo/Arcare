@@ -6,7 +6,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { TokenLogo } from "@/components/tokens/TokenLogo";
 import { useWallet } from "@/components/wallet/WalletContext";
 import { arcClient, formatStableAmount } from "@/lib/arc-client";
-import { PREDICTION_MARKET_ABI, DEPEG_RESOLVER_ABI } from "@/lib/abis";
+import { PREDICTION_MARKET_ABI } from "@/lib/abis";
 import { loadAllMarkets } from "@/lib/markets";
 import { useContract } from "@/lib/use-contract";
 import type { MarketOnChain } from "@/lib/types";
@@ -17,7 +17,6 @@ type Position = {
   yesBalance: bigint;
   noBalance: bigint;
   lpShares: bigint;
-  resolverLPShares: bigint;
   totalLPShares: bigint;
 };
 
@@ -43,7 +42,7 @@ async function loadPositions(address: `0x${string}`): Promise<Position[]> {
 
   const results = await Promise.all(
     markets.map(async (market) => {
-      const [yesBalance, noBalance, lpShares, resolverLPShares, totalLPShares] = await Promise.all([
+      const [yesBalance, noBalance, lpShares, totalLPShares] = await Promise.all([
         arcClient.readContract({
           address: market.address as `0x${string}`,
           abi: PREDICTION_MARKET_ABI,
@@ -65,12 +64,6 @@ async function loadPositions(address: `0x${string}`): Promise<Position[]> {
         arcClient.readContract({
           address: market.address as `0x${string}`,
           abi: PREDICTION_MARKET_ABI,
-          functionName: "lpShares",
-          args: [market.resolverAddress],
-        }) as Promise<bigint>,
-        arcClient.readContract({
-          address: market.address as `0x${string}`,
-          abi: PREDICTION_MARKET_ABI,
           functionName: "totalLPShares",
         }) as Promise<bigint>,
       ]);
@@ -80,7 +73,6 @@ async function loadPositions(address: `0x${string}`): Promise<Position[]> {
         yesBalance,
         noBalance,
         lpShares,
-        resolverLPShares,
         totalLPShares,
       } satisfies Position;
     })
@@ -90,8 +82,7 @@ async function loadPositions(address: `0x${string}`): Promise<Position[]> {
     (position) =>
       position.yesBalance > 0n ||
       position.noBalance > 0n ||
-      position.lpShares > 0n ||
-      position.resolverLPShares > 0n
+      position.lpShares > 0n
   );
 }
 
@@ -124,10 +115,9 @@ function AmountStack({ entries }: { entries: Array<{ symbol: string; value: bigi
 }
 
 function PositionCard({ pos, walletState, onComplete }: { pos: Position; walletState: WalletState; onComplete: () => void }) {
-  const { market, yesBalance, noBalance, lpShares, resolverLPShares, totalLPShares } = pos;
+  const { market, yesBalance, noBalance, lpShares, totalLPShares } = pos;
   const { isConnected, connect } = walletState;
   const contract = useContract(market.address as `0x${string}`, PREDICTION_MARKET_ABI);
-  const resolver = useContract(market.resolverAddress as `0x${string}`, DEPEG_RESOLVER_ABI);
 
   const [txStep, setTxStep] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,7 +127,6 @@ function PositionCard({ pos, walletState, onComplete }: { pos: Position; walletS
   const yesCurrentValue = markToMarket(yesBalance, market.yesPrice);
   const noCurrentValue = markToMarket(noBalance, market.noPrice);
   const lpValue = totalLPShares > 0n ? (lpShares * market.totalCollateral) / totalLPShares : 0n;
-  const protocolLpValue = totalLPShares > 0n ? (resolverLPShares * market.totalCollateral) / totalLPShares : 0n;
   const isHack = market.category === "HACK";
 
   const handleRedeem = async () => {
@@ -160,20 +149,6 @@ function PositionCard({ pos, walletState, onComplete }: { pos: Position; walletS
     setTxStep("Withdrawing liquidity…");
     try {
       await contract.write("removeLiquidity", [lpShares]);
-      onComplete();
-    } catch (e: unknown) {
-      setError((e as Error).message ?? "Transaction failed");
-    } finally {
-      setTxStep(null);
-    }
-  };
-
-  const handleClaimProtocolLP = async () => {
-    if (!isConnected) { connect(); return; }
-    setError(null);
-    setTxStep("Claiming protocol liquidity…");
-    try {
-      await resolver.write("claimLiquidity", [market.address]);
       onComplete();
     } catch (e: unknown) {
       setError((e as Error).message ?? "Transaction failed");
@@ -302,31 +277,6 @@ function PositionCard({ pos, walletState, onComplete }: { pos: Position; walletS
         </div>
       )}
 
-      {resolverLPShares > 0n && (
-        <div className="space-y-3 rounded-xl border border-amber-400/25 bg-amber-50/60 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-amber-500">lock</span>
-              <span className="text-sm font-bold text-slate-700">Protocol LP</span>
-              <span className="text-[10px] text-slate-400">(initial liquidity)</span>
-            </div>
-            <div className="text-right">
-              <div className="text-lg font-extrabold text-slate-900">{formatStableAmount(protocolLpValue)} {market.collateralSymbol}</div>
-              <div className="text-[10px] text-slate-400">{formatStableAmount(resolverLPShares)} shares</div>
-            </div>
-          </div>
-          <button
-            onClick={handleClaimProtocolLP}
-            disabled={!!txStep}
-            className="w-full rounded-full border border-amber-400 py-2 text-sm font-bold text-amber-600 transition-colors hover:bg-amber-50 disabled:opacity-50"
-          >
-            {txStep === "Claiming protocol liquidity…" ? (
-              <span className="flex items-center justify-center gap-2"><Spinner size={14} />Claiming…</span>
-            ) : "Claim Protocol LP"}
-          </button>
-        </div>
-      )}
-
       {canRedeem && (
         <button
           onClick={handleRedeem}
@@ -399,7 +349,7 @@ export default function PortfolioPage() {
     const yesValue = markToMarket(position.yesBalance, position.market.yesPrice);
     const noValue = markToMarket(position.noBalance, position.market.noPrice);
     const lpValue = position.totalLPShares > 0n
-      ? ((position.lpShares + position.resolverLPShares) * position.market.totalCollateral) / position.totalLPShares
+      ? (position.lpShares * position.market.totalCollateral) / position.totalLPShares
       : 0n;
     return yesValue + noValue + lpValue;
   });
