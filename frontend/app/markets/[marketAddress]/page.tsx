@@ -17,7 +17,7 @@ import { StablecoinPriceChart } from "@/components/charts/StablecoinPriceChart";
 import { DepegGauge } from "@/components/charts/DepegGauge";
 import { useWallet } from "@/components/wallet/WalletContext";
 import { arcClient, formatStableAmount, parseDepegThreshold } from "@/lib/arc-client";
-import { PREDICTION_MARKET_ABI, DEPEG_RESOLVER_ABI } from "@/lib/abis";
+import { PREDICTION_MARKET_ABI } from "@/lib/abis";
 import { loadAllMarkets, loadMarketByAddress } from "@/lib/markets";
 import type { MarketOnChain } from "@/lib/types";
 
@@ -107,34 +107,28 @@ export default function MarketPage() {
     loadMarket().finally(() => setLoading(false));
   }, [loadMarket]);
 
-  // Poll market state every 10s to pick up trades and resolution
-  useEffect(() => {
-    const id = setInterval(() => void loadMarket(), 10_000);
-    return () => clearInterval(id);
-  }, [loadMarket]);
-
   useEffect(() => {
     if (isConnected) void loadUserBalances();
   }, [isConnected, loadUserBalances]);
 
-  // Fetch the price last submitted to DepegResolver on-chain (reflects simulate depeg too)
+  // Fetch live Chainlink price for DEPEG markets
   useEffect(() => {
     if (!market || market.category !== "DEPEG") return;
-    if (!market.resolverAddress || market.resolverAddress === "0x0") return;
-
+    const asset = parseDepegAsset(market.question);
+    const feed = asset ? DEPEG_FEEDS[asset] : null;
+    if (!feed) return;
     const fetchPrice = async () => {
       try {
-        const raw = await arcClient.readContract({
-          address: market.resolverAddress,
-          abi: DEPEG_RESOLVER_ABI,
-          functionName: "lastMarketPrice",
-          args: [market.address as `0x${string}`],
-        }) as bigint;
-        if (raw > 0n) setLivePrice(Number(raw) / 1e8);
-      } catch { /* resolver unavailable */ }
+        const [, answer] = await sepoliaClient.readContract({
+          address: feed.address,
+          abi: LATEST_ROUND_ABI,
+          functionName: "latestRoundData",
+        }) as [bigint, bigint, bigint, bigint, bigint];
+        setLivePrice(Number(answer) / 1e8);
+      } catch { /* feed unavailable */ }
     };
     void fetchPrice();
-    const id = setInterval(() => void fetchPrice(), 10_000);
+    const id = setInterval(() => void fetchPrice(), 30_000);
     return () => clearInterval(id);
   }, [market]);
 

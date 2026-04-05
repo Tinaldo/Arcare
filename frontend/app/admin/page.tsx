@@ -7,17 +7,15 @@ import { Spinner } from "@/components/ui/Spinner";
 import { TokenLogo } from "@/components/tokens/TokenLogo";
 import { useWallet } from "@/components/wallet/WalletContext";
 import { arcClient, parseStableAmount } from "@/lib/arc-client";
-import { MARKET_FACTORY_ABI, DEPEG_RESOLVER_ABI, PREDICTION_MARKET_ABI } from "@/lib/abis";
+import { MARKET_FACTORY_ABI, PREDICTION_MARKET_ABI } from "@/lib/abis";
 import { arcTestnet } from "@/lib/arc-client";
 import {
   ARC_EURC_ADDRESS,
   ARC_USDC_ADDRESS,
-  DEPEG_RESOLVER_ADDRESS,
-  EURC_DEPEG_RESOLVER_ADDRESS,
   EURC_MARKET_FACTORY_ADDRESS,
   MARKET_FACTORY_ADDRESS,
 } from "@/lib/addresses";
-import { getLoadableCollaterals, isConfiguredAddress } from "@/lib/collaterals";
+import { getLoadableCollaterals } from "@/lib/collaterals";
 import {
   detectCollateralForMarket,
   loadManagedMarkets as fetchManagedMarkets,
@@ -66,10 +64,8 @@ export default function AdminPage() {
 
   const usdcFactory = useContract(MARKET_FACTORY_ADDRESS, MARKET_FACTORY_ABI);
   const usdcToken = useContract(ARC_USDC_ADDRESS, ERC20_ABI);
-  const usdcResolver = useContract(DEPEG_RESOLVER_ADDRESS, DEPEG_RESOLVER_ABI);
   const eurcFactory = useContract(EURC_MARKET_FACTORY_ADDRESS, MARKET_FACTORY_ABI);
   const eurcToken = useContract(ARC_EURC_ADDRESS, ERC20_ABI);
-  const eurcResolver = useContract(EURC_DEPEG_RESOLVER_ADDRESS, DEPEG_RESOLVER_ABI);
 
   const [roles, setRoles] = useState<Roles | null>(null);
   const [loadingRoles, setLoadingRoles] = useState(false);
@@ -120,9 +116,9 @@ export default function AdminPage() {
 
   const getContractsForSymbol = useCallback((symbol: string) => {
     return symbol === "EURC"
-      ? { factory: eurcFactory, token: eurcToken, resolver: eurcResolver }
-      : { factory: usdcFactory, token: usdcToken, resolver: usdcResolver };
-  }, [eurcFactory, eurcToken, eurcResolver, usdcFactory, usdcToken, usdcResolver]);
+      ? { factory: eurcFactory, token: eurcToken }
+      : { factory: usdcFactory, token: usdcToken };
+  }, [eurcFactory, eurcToken, usdcFactory, usdcToken]);
 
   useEffect(() => {
     if (category !== "DEPEG") return;
@@ -266,31 +262,18 @@ export default function AdminPage() {
 
       for (const collateral of activeCollaterals) {
         const contracts = getContractsForSymbol(collateral.symbol);
-        const useResolver = category === "DEPEG" && isConfiguredAddress(collateral.resolverAddress);
-        const approveTarget = useResolver ? collateral.resolverAddress : collateral.factoryAddress;
-
         setCreateStep(`Step ${stepIndex} of ${totalSteps}: Approve ${collateral.symbol}…`);
-        await contracts.token.write("approve", [approveTarget, liquidityAmount]);
+        await contracts.token.write("approve", [collateral.factoryAddress, liquidityAmount]);
         stepIndex += 1;
 
         setCreateStep(`Step ${stepIndex} of ${totalSteps}: Create ${collateral.symbol} market…`);
-        if (useResolver) {
-          await contracts.resolver.write("createMarket", [
-            question,
-            category,
-            BigInt(deadlineTs),
-            liquidityAmount,
-            normalizedPriceFeed,
-          ]);
-        } else {
-          await contracts.factory.write("createMarket", [
-            question,
-            category,
-            BigInt(deadlineTs),
-            liquidityAmount,
-            normalizedPriceFeed,
-          ]);
-        }
+        await contracts.factory.write("createMarket", [
+          question,
+          category,
+          BigInt(deadlineTs),
+          liquidityAmount,
+          normalizedPriceFeed,
+        ]);
         stepIndex += 1;
       }
 
